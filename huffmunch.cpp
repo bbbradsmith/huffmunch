@@ -58,7 +58,12 @@ static unsigned int debug_bits = 0;
 // TODO replace digraphs concept with a better common substring alhorithm
 //
 
+// number of times a digraph can be tried (increases compression time on the order of RETRIES^2, but might do ~1% better with a few retries)
 #define RETRIES 0
+
+// number of entries to try in a single pass before giving up entirely (a value of 100 ends compression earlier, faster but ~1% worse compression)
+#define CUTOFF 0
+
 typedef pair<elem,elem> Digraph;
 namespace std {
 	template<> struct hash<Digraph>
@@ -1258,6 +1263,7 @@ MunchInput huffmunch_optimize(const Stri& data)
 				}
 			}
 			++last_attempt;
+			if (CUTOFF && last_attempt > CUTOFF) break;
 		}
 	}
 	return best;
