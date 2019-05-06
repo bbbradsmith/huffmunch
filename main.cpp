@@ -42,7 +42,7 @@ int huffmunch_file(const char* file_in, const char* file_out)
 	int result = huffmunch_compress(buffer_in, size_in, buffer_out, size_out, NULL, 0);
 	if (result != HUFFMUNCH_OK)
 	{
-		printf("error: compression error %d\n", result);
+		printf("error: compression error %d: %s\n", result, huffmunch_error_description(result));
 		return result;
 	}
 	printf("%d bytes compressed\n", size_out);
@@ -75,7 +75,6 @@ int main(int argc, char** argv)
 	huffmunch_file("test/test0.bin", "test/test0" TS);
 	huffmunch_file("test/test1.bin", "test/test1" TS);
 	huffmunch_file("test/test2.bin", "test/test2" TS);
-	huffmunch_file("test/mario.prefix.chr", "test/mario.prefix" TS);
 	huffmunch_file("test/Super Mario Bros. (JU) (PRG0) [!].chr", "test/Super Mario Bros. (JU) (PRG0) [!]" TS);
 	huffmunch_file("test/count.htm", "test/count" TS);
 	huffmunch_file("test/rando.bin", "test/rando" TS);

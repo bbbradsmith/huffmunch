@@ -20,6 +20,11 @@ using namespace std;
 // the longest allowed length of a dictionary symbol
 const unsigned int MAX_SYMBOL_SIZE = 255;
 
+// size of allowed offset splits
+// 2 bytes = 64 KB maximum output size
+// 3 bytes = 16 MB maximum output size
+const unsigned int SPLIT_OFFSET_SIZE = 2;
+
 //
 // type definitions
 //
@@ -38,10 +43,12 @@ const elem EMPTY = ~0U;
 const unsigned int DBT = HUFFMUNCH_DEBUG_TREE;
 const unsigned int DBM = HUFFMUNCH_DEBUG_MUNCH;
 const unsigned int DBV = HUFFMUNCH_DEBUG_VERIFY;
+const unsigned int DBI = HUFFMUNCH_DEBUG_INTERNAL;
+const unsigned int DBH = HUFFMUNCH_DEBUG_HEADER;
 
 #if HUFFMUNCH_DEBUG
 static unsigned int debug_bits = 0;
-#define DEBUG_OUT(bits_,...) { if(debug_bits >= bits_) { printf(__VA_ARGS__); } }
+#define DEBUG_OUT(bits_,...) { if(debug_bits & (bits_)) { printf(__VA_ARGS__); } }
 #else
 #define DEBUG_OUT(...) {}
 #endif
@@ -71,7 +78,7 @@ public:
 };
 
 //
-// BitReader and BitWriter for writing a bitstream to a vector<u8>ss
+// BitReader and BitWriter for writing a bitstream to a vector<u8>
 //
 
 class BitReader
@@ -98,6 +105,15 @@ public:
 		bit = 0;
 		for (uint i=0; i<bit_; ++i) read();
 	}
+	void skip_flush() // skip to next byte
+	{
+		if (end()) return;
+		if (bit != 0)
+		{
+			bit = 0;
+			pos += 1;
+		}
+	}
 };
 
 class BitWriter
@@ -109,7 +125,7 @@ class BitWriter
 public:
 	BitWriter(vector<u8>* v_) : v(v_), buffer(0), bit(0) {}
 
-	void flush()
+	void flush() // finish byte
 	{
 		if (bit>0)
 		{
@@ -169,6 +185,48 @@ uint read_intx(uint pos, const vector<u8>& packed, uint& out)
 		return pos+3;
 	}
 
+}
+
+// for packing unsigned integers of SPLIT_OFFSET_SIZE into the header
+bool pack_header(uint v, uint index, vector<u8>& header)
+{
+	uint ix = index * SPLIT_OFFSET_SIZE;
+	if ((ix + SPLIT_OFFSET_SIZE) > header.size())
+	{
+		DEBUG_OUT(DBI,"no room for header?\n");
+		return false;
+	}
+	uint vs = v;
+	for (uint i=0; i<SPLIT_OFFSET_SIZE; ++i)
+	{
+		header[ix+i] = vs & 0xFF;
+		vs >>= 8;
+	}
+	if (vs != 0)
+	{
+		DEBUG_OUT(DBH,"split value (%d) too large for SPLIT_OFFSET_SIZE\n",v);
+		return false;
+	}
+	return true;
+}
+
+// for unpacking unsigned integers of SPLIT_OFFSET_SIZE from the header
+uint unpack_header(uint index, const vector<u8>& header)
+{
+	uint ix = index * SPLIT_OFFSET_SIZE;
+	if ((ix + SPLIT_OFFSET_SIZE) > header.size())
+	{
+		DEBUG_OUT(DBH,"header not large enough for requested data?\n");
+		return ~0UL;
+	}
+	uint v = 0;
+	uint s = 0;
+	for (uint i=0; i<SPLIT_OFFSET_SIZE; ++i)
+	{
+		v |=  header[ix+i] << s;
+		s += 8;
+	}
+	return v;
 }
 
 inline uint bytesize(uint bits)
@@ -320,7 +378,10 @@ void huffman_tree(const MunchInput& in, HuffTree& tree)
 	// count frequencies
 	vector<int> count(in.symbols.size(),0);
 	for (auto c : in.data)
+	{
+		if (c == EMPTY) continue;
 		count[c] += 1;
+	}
 
 	// build nodes and put into priority queue
 	priority_queue<HuffNode*,vector<HuffNode*>,HuffNode::Compare> q;
@@ -361,11 +422,17 @@ uint huffman_tree_bits(const HuffTree& tree)
 }
 
 // encode a bitstream given a huffman code map
-void huffman_encode(const unordered_map<elem,HuffCode>& codes, const Stri& data, vector<u8>& output)
+void huffman_encode(const unordered_map<elem,HuffCode>& codes, const Stri& data, vector<u8>& output, vector<uint>& splits)
 {
 	BitWriter bitstream(&output);
 	for (elem c : data)
 	{
+		if (c == EMPTY)
+		{
+			bitstream.flush(); // finish byte before starting new split
+			splits.push_back(output.size());
+			continue;
+		}
 		HuffCode code = codes.at(c);
 		bitstream.write(code.bitstream, code.count);
 	}
@@ -450,7 +517,6 @@ uint huffmunch_tree_bytes(const HuffTree& tree, const vector<Stri>& symbols)
 	return huffmunch_tree_bytes_node(tree, tree.head, symbols);
 }
 
-
 void huffmunch_tree_build_node(const HuffTree& tree, const HuffNode* node, const vector<Stri>& symbols,
 	uint depth, uint code, unordered_map<elem,HuffCode>& codes,
 	vector<Fixup>& fixup, unordered_map<elem,uint>& string_position,
@@ -458,7 +524,9 @@ void huffmunch_tree_build_node(const HuffTree& tree, const HuffNode* node, const
 {
 	#if HUFFMUNCH_DEBUG
 	if (debug_bits & DBT)
+	{
 		for(uint i=0;i<depth;++i) printf("+---"); printf("code %d/%d at %d\n",code,depth,output.size());
+	}
 	#endif
 
 	if(node->leaf != EMPTY)
@@ -570,6 +638,8 @@ void huffmunch_tree_build_node(const HuffTree& tree, const HuffNode* node, const
 
 void huffmunch_tree_build(const HuffTree& tree, const vector<Stri>& symbols, unordered_map<elem,HuffCode>& codes, vector<u8>& output)
 {
+	uint tree_pos = output.size();
+
 	vector<Fixup> fixup;
 	unordered_map<elem,uint> string_position;
 	huffmunch_tree_build_node(tree, tree.head, symbols, 0, 0, codes, fixup, string_position, output);
@@ -585,141 +655,118 @@ void huffmunch_tree_build(const HuffTree& tree, const vector<Stri>& symbols, uno
 		output[f.position+1] = link >> 8;
 	}
 
-	assert(output.size() == huffmunch_tree_bytes(tree, symbols));
+	assert((output.size()-tree_pos) == huffmunch_tree_bytes(tree, symbols));
 }
 
-bool huffmunch_verify(const Stri& original, const vector<u8>& packed, uint length, Stri& unpacked)
+// unpacks packed into unpacked, false on error
+bool huffmunch_decode(const vector<u8>& packed, Stri& unpacked)
 {
-	uint pos = 0;
-
-	// TODO start data with 2 byte location instead
-
-	// find the data start by following the tree of a stream of 1s until a string is found
-	while (pos < packed.size())
+	// header
+	vector<uint> split_start;
+	vector<uint> split_size;
+	uint split_count = unpack_header(0,packed);
+	for (unsigned int i=0; i<split_count; ++i)
 	{
-		DEBUG_OUT(DBV,"seeking: %d\n", pos);
-		uint skip = packed[pos]; ++pos;
-		if (skip == 255)
-		{
-			skip = (packed[pos+0] + (packed[pos+1]<<8)) + 1; pos += 2;
-		}
-
-		if (skip <= 2)
-		{
-			// found a string
-			if (skip == 0)
-			{
-				pos += 1; // single character
-			}
-			else if (skip == 1)
-			{
-				pos += packed[pos] + 1; // length + string
-			}
-			else if (skip == 2)
-			{
-				pos += packed[pos] + 3; // length + string + reference
-			}
-			break;
-		}
-		else
-		{
-			pos += skip - 1; // take right node
-		}
+		split_start.push_back(unpack_header(1+i, packed));
+		split_size.push_back(unpack_header(1+i+split_count,packed));
 	}
+	const uint table_pos = (1 + (split_count * 2)) * SPLIT_OFFSET_SIZE;
 
-	// begin reading data
 	BitReader bitstream(&packed);
-	bitstream.seek(pos);
+
 	#if HUFFMUNCH_DEBUG
 	if (debug_bits & DBV)
 	{
-		printf("bitstream position: %d\n",pos);
+		printf("bitstream split 0 position: %d\n",split_start[0]);
+		bitstream.seek(split_start[0]);
 		while (!bitstream.end())
 		{
 			printf("%d",bitstream.read());
 		}
 		printf("\n");
-		bitstream.seek(pos);
 	}
 	#endif
 
-	while (unpacked.size() < length)
+	for (uint s=0; s<split_count; ++s)
 	{
-		pos = 0;
-		uint b = 0;
-		uint d = 0;
+		uint length = split_size[s];
+		bitstream.seek(split_start[s]);
+		unpacked.push_back(EMPTY);
+		DEBUG_OUT(DBV,"split %d: %X (%d bytes)\n",s,split_start[s],length);
 
-		DEBUG_OUT(DBV,"read: ");
-
-		uint skip = packed[pos]; ++pos;
-		if (skip == 255)
+		while (length)
 		{
-			skip = (packed[pos+0] + (packed[pos+1]<<8)) + 1; pos += 2;
-		}
+			uint pos = table_pos;
+			uint b = 0;
+			uint d = 0;
 
-		while (skip > 2)
-		{
-			if (bitstream.read() != 0)
-			{
-				pos += skip - 1; // take right node
-				b = (b << 1) | 1;
-				DEBUG_OUT(DBV,"1");
-			}
-			else
-			{
-				pos += 0; // take left node
-				b = (b << 1) | 0;
-				DEBUG_OUT(DBV,"0");
-			}
-			d += 1;
+			DEBUG_OUT(DBV,"read: ");
 
-			// read next node header
-			skip = packed[pos]; ++pos;
+			uint skip = packed[pos]; ++pos;
 			if (skip == 255)
 			{
 				skip = (packed[pos+0] + (packed[pos+1]<<8)) + 1; pos += 2;
 			}
-		};
-		DEBUG_OUT(DBV,"\n");
 
-		DEBUG_OUT(DBV,"decode: %d/%d [",b,d);
-		uint slen = 1;
-		while (slen > 0)
-		{
-			if (skip > 0)
+			while (skip > 2)
 			{
-				slen = packed[pos]; ++pos;
-			}
-			
+				if (bitstream.read() != 0)
+				{
+					pos += skip - 1; // take right node
+					b = (b << 1) | 1;
+					DEBUG_OUT(DBV,"1");
+				}
+				else
+				{
+					pos += 0; // take left node
+					b = (b << 1) | 0;
+					DEBUG_OUT(DBV,"0");
+				}
+				d += 1;
+
+				// read next node header
+				skip = packed[pos]; ++pos;
+				if (skip == 255)
+				{
+					skip = (packed[pos+0] + (packed[pos+1]<<8)) + 1; pos += 2;
+				}
+			};
+			DEBUG_OUT(DBV,"\n");
+
+			DEBUG_OUT(DBV,"decode: %d/%d [",b,d);
+			uint slen = 1;
 			while (slen > 0)
 			{
-				elem c = packed[pos]; ++pos;
-				DEBUG_OUT(DBV,"%d,",c);
-				unpacked.push_back(c);
-				elem co = original[unpacked.size()-1];
-				if (c != co)
+				if (skip > 0)
 				{
-					DEBUG_OUT(DBV," --- MISMATCH! Expected: %d\n",co);
-					return false;
+					slen = packed[pos]; ++pos;
 				}
-				--slen;
-			}
+			
+				while (slen > 0)
+				{
+					elem c = packed[pos]; ++pos;
+					DEBUG_OUT(DBV,"%d,",c);
+					unpacked.push_back(c);
+					--length;
+					--slen;
+				}
 
-			if (skip == 2)
-			{
-				uint suffix_pos = packed[pos+0] + (packed[pos+1] << 8);
-				pos = suffix_pos;
-				DEBUG_OUT(DBV,"(%d),",pos);
-				skip = packed[pos]; ++pos;
-				if (skip > 2)
+				if (skip == 2)
 				{
-					DEBUG_OUT(DBV," --- Invalid suffix?\n");
-					return false;
+					uint suffix_pos = packed[pos+0] + (packed[pos+1] << 8);
+					pos = suffix_pos;
+					DEBUG_OUT(DBV,"(%d),",pos);
+					skip = packed[pos]; ++pos;
+					if (skip > 2)
+					{
+						DEBUG_OUT(DBV," --- Invalid suffix?\n");
+						return false;
+					}
+					slen = 1;
 				}
-				slen = 1;
 			}
+			DEBUG_OUT(DBV,"]\n");
 		}
-		DEBUG_OUT(DBV,"]\n");
 	}
 
 	return true;
@@ -809,6 +856,8 @@ void huffmunch_tree_build_node(const HuffNode* node, uint depth, vector<vector<e
 
 void huffmunch_tree_build(const HuffTree& tree, const vector<Stri>& symbols, unordered_map<elem,HuffCode>& codes, vector<u8>& output)
 {
+	uint tree_pos = output.size();
+
 	vector<vector<elem>> leaves;
 	huffmunch_tree_build_node(tree.head, 0, leaves);
 
@@ -894,16 +943,28 @@ void huffmunch_tree_build(const HuffTree& tree, const vector<Stri>& symbols, uno
 		output[f.position+1] = link >> 8;
 	}
 
-	assert(output.size() == huffmunch_tree_bytes(tree, symbols));
+	assert((output.size()-tree_pos) == huffmunch_tree_bytes(tree, symbols));
 }
 
-bool huffmunch_verify(const Stri& original, const vector<u8>& packed, uint length, Stri& unpacked)
+// unpacks packed into unpacked, false on error
+bool huffmunch_decode(const vector<u8>& packed, Stri& unpacked)
 {
-	uint pos = 0;
+	// header
+	vector<uint> split_start;
+	vector<uint> split_size;
+	uint split_count = unpack_header(0,packed);
+	for (unsigned int i=0; i<split_count; ++i)
+	{
+		split_start.push_back(unpack_header(1+i, packed));
+		split_size.push_back(unpack_header(1+i+split_count,packed));
+	}
+	const uint table_pos = (1 + (split_count * 2)) * SPLIT_OFFSET_SIZE;
+
+	uint pos = table_pos;
 
 	// read depth of tree
 	uint depth;
-	pos = read_intx(pos, packed, depth);
+	pos = read_intx(table_pos, packed, depth);
 	DEBUG_OUT(DBV,"depth: %d\n", depth);
 
 	// read leaf counts from tree
@@ -918,132 +979,113 @@ bool huffmunch_verify(const Stri& original, const vector<u8>& packed, uint lengt
 		DEBUG_OUT(DBV,"leaves %d: %d\n",i,leaves);
 	}
 	DEBUG_OUT(DBV,"string count: %d\n",string_count);
-
-	// skip all available strings to find data start
 	const uint string_table_pos = pos;
-	for (uint i=0; i<string_count; ++i)
-	{
-		DEBUG_OUT(DBV,"string position %d: %5d\n",i,pos);
-		uint slen = packed[pos]; ++pos;
-		if (slen != 0)
-		{
-			pos += slen;
-		}
-		else
-		{
-			slen = packed[pos]; ++pos;
-			pos += slen + 2; // string with suffix reference
-		}
-	}
 
-	// pos is now the start of data
 	BitReader bitstream(&packed);
-	bitstream.seek(pos);
+
 	#if HUFFMUNCH_DEBUG
 	if (debug_bits & DBV)
 	{
-		printf("bitstream position: %d\n",pos);
+		printf("bitstream split 0 position: %d\n",split_start[0]);
+		bitstream.seek(split_start[0]);
 		while (!bitstream.end())
 		{
 			printf("%d",bitstream.read());
 		}
 		printf("\n");
-		bitstream.seek(pos);
 	}
 	#endif
 
-	while (unpacked.size() < length)
+	for (uint s=0; s<split_count; ++s)
 	{
-		uint fc = 0; // first code at current depth
-		uint fs = 0; // first symbol at current depth
-		uint b = 0; // current bitcode
+		uint length = split_size[s];
+		bitstream.seek(split_start[s]);
+		unpacked.push_back(EMPTY);
+		DEBUG_OUT(DBV,"split %d: %X (%d bytes)\n",s,split_start[s],length);
 
-		uint s = 0; // symbol to decode
-		uint d;
-		for (d=0; d <= depth; ++d)
+		while (length)
 		{
-			uint ds = leaf_count[d]; // symbols on current layer
-			uint dc = b - fc; // relative code at current depth
+			uint fc = 0; // first code at current depth
+			uint fs = 0; // first symbol at current depth
+			uint b = 0; // current bitcode
 
-			//if (verbose_debug) printf("decode: %d/%d (%d,%d,%d,%d)\n",b,d,ds,dc,fs,fc);
+			uint s = 0; // symbol to decode
+			uint d;
+			for (d=0; d <= depth; ++d)
+			{
+				uint ds = leaf_count[d]; // symbols on current layer
+				uint dc = b - fc; // relative code at current depth
 
-			if (dc < ds)
-			{
-				// symbol is matched
-				s = fs + dc;
-				break;
-			}
-			fs += ds; // advance first symbol to next layer
-			fc += ds; // advance code to first non-leaf on layer...
-			fc *= 2;  // ...then make room for a new bit on next layer
+				//if (verbose_debug) printf("decode: %d/%d (%d,%d,%d,%d)\n",b,d,ds,dc,fs,fc);
 
-			// read a new bit
-			b = (b << 1) | bitstream.read();
-		}
-		if (d > depth) return false; // break was not reached, should be impossible?
-		if (s >= string_count) return false; // should also be impossible
-		DEBUG_OUT(DBV,"(%d) decode: %d/%d > %d [",unpacked.size(),b,d,s);
-
-		// find the start of symbol
-		pos = string_table_pos;
-		for (uint is = 0; is < s; ++is)
-		{
-			uint slen = packed[pos]; ++pos;
-			if (slen != 0)
-			{
-				pos += slen;
-			}
-			else
-			{
-				slen = packed[pos]; ++pos;
-				pos += slen + 2;
-			}
-		}
-		// emit symbol
-		bool remains = true;
-		while (remains)
-		{
-			uint slen = packed[pos]; ++pos;
-			if (slen != 0)
-			{
-				for (uint i=0; i<slen; ++i)
+				if (dc < ds)
 				{
-					elem c = packed[pos]; ++pos;
-					DEBUG_OUT(DBV,"%d,",c);
-					unpacked.push_back(c);
-					elem co = original[unpacked.size()-1];
-					if (c != co)
-					{
-						DEBUG_OUT(DBV," --- MISMATCH! Expected: %d\n",co);
-						return false;
-					}
+					// symbol is matched
+					s = fs + dc;
+					break;
 				}
-				remains = false; // no suffix
+				fs += ds; // advance first symbol to next layer
+				fc += ds; // advance code to first non-leaf on layer...
+				fc *= 2;  // ...then make room for a new bit on next layer
+
+				// read a new bit
+				b = (b << 1) | bitstream.read();
 			}
-			else
+			if (d > depth) return false; // break was not reached, should be impossible?
+			if (s >= string_count) return false; // should also be impossible
+			DEBUG_OUT(DBV,"(%d) decode: %d/%d > %d [",unpacked.size(),b,d,s);
+
+			// find the start of symbol
+			pos = string_table_pos;
+			for (uint is = 0; is < s; ++is)
 			{
-				slen = packed[pos]; ++pos;
-				if (slen < 1) return false; // malformed symbol
-				for (uint i=0; i<slen; ++i)
+				uint slen = packed[pos]; ++pos;
+				if (slen != 0)
 				{
-					elem c = packed[pos]; ++pos;
-					DEBUG_OUT(DBV,"%d,",c);
-					unpacked.push_back(c);
-					elem co = original[unpacked.size()-1];
-					if (c != co)
-					{
-						DEBUG_OUT(DBV," --- MISMATCH! Expected: %d\n",co);
-						return false;
-					}
+					pos += slen;
 				}
-				// repeat loop from new suffix string
-				uint suffix_pos = packed[pos+0] + (packed[pos+1] << 8);
-				pos = suffix_pos;
-				remains = true;
-				DEBUG_OUT(DBV,"(%d),",pos);
+				else
+				{
+					slen = packed[pos]; ++pos;
+					pos += slen + 2;
+				}
 			}
+			// emit symbol
+			bool remains = true;
+			while (remains)
+			{
+				uint slen = packed[pos]; ++pos;
+				if (slen != 0)
+				{
+					for (uint i=0; i<slen; ++i)
+					{
+						elem c = packed[pos]; ++pos;
+						DEBUG_OUT(DBV,"%d,",c);
+						unpacked.push_back(c);
+						--length;
+					}
+					remains = false; // no suffix
+				}
+				else
+				{
+					slen = packed[pos]; ++pos;
+					if (slen < 1) return false; // malformed symbol
+					for (uint i=0; i<slen; ++i)
+					{
+						elem c = packed[pos]; ++pos;
+						DEBUG_OUT(DBV,"%d,",c);
+						unpacked.push_back(c);
+						--length;
+					}
+					// repeat loop from new suffix string
+					uint suffix_pos = packed[pos+0] + (packed[pos+1] << 8);
+					pos = suffix_pos;
+					remains = true;
+					DEBUG_OUT(DBV,"(%d),",pos);
+				}
+			}
+			DEBUG_OUT(DBV,"]\n");
 		}
-		DEBUG_OUT(DBV,"]\n");
 	}
 
 	return true;
@@ -1075,7 +1117,12 @@ MunchInput huffmunch_optimize(const Stri& data)
 	// setup initial
 	MunchInput best;
 	best.data = data;
-	elem n = *max_element(data.begin(),data.end());
+	elem n = 0;
+	for (elem v : data)
+	{
+		if (v == EMPTY) continue;
+		if (v > n) n = v;
+	}
 	best.symbols.clear();
 	for (elem i=0; i<=n; ++i)
 	{
@@ -1116,7 +1163,7 @@ MunchInput huffmunch_optimize(const Stri& data)
 		for (uint i=0; i<best.data.size()-1; ++i)
 		{
 			Digraph dg = Digraph(best.data[i],best.data[i+1]);
-			if (dg != last_digraph)
+			if (dg != last_digraph && dg.first != EMPTY && dg.second != EMPTY)
 			{
 				digraph_counter.count(dg);
 				last_digraph = dg;
@@ -1220,6 +1267,41 @@ MunchInput huffmunch_optimize(const Stri& data)
 // public interface
 //
 
+const unsigned int SPLITS_DEFAULT[1] = { 0 };
+
+bool splits_valid(const unsigned int* splits, unsigned int split_count)
+{
+	if (split_count < 1) return false;
+	if (splits[0] != 0)
+	{
+		DEBUG_OUT(DBV,"splits must begin with 0");
+		return false;
+	}
+	for (unsigned int i=1; i<split_count; ++i)
+	{
+		if (splits[i] < splits[i+1])
+		{
+			DEBUG_OUT(DBV,"splits must be in increasing order");
+			return false;
+		}
+	}
+	return true;
+}
+
+const char* huffmunch_error_description(int e)
+{
+	switch (e)
+	{
+	case HUFFMUNCH_OK: return "No error.";
+	case HUFFMUNCH_OUTPUT_OVERFLOW: return "Output data too large for buffer.";
+	case HUFFMUNCH_VERIFY_FAIL: return "Internal verification error.";
+	case HUFFMUNCH_INTERNAL_ERROR: return "Internal error.";
+	case HUFFMUNCH_INVALID_SPLITS: return "Splits must only increase in valid, beginning with 0.";
+	case HUFFMUNCH_SPLIT_OVERFLOW: return "Split offset or data size too large for SPLIT_OFFSET_SIZE.";
+	default: return "Unknown error value.";
+	}
+}
+
 int huffmunch_compress(
 	const unsigned char* data,
 	unsigned int data_size,
@@ -1228,44 +1310,94 @@ int huffmunch_compress(
 	const unsigned int *splits,
 	unsigned int split_count)
 {
-	Stri sdata;
-	for (unsigned int i=0; i<data_size; ++i) sdata.push_back(elem(data[i]));
-	MunchInput best = huffmunch_optimize(sdata);
-
-	HuffTree tree;
-	unordered_map<elem,HuffCode> codes;
-	vector<u8> packed;
-	huffman_tree(best, tree);
-	huffmunch_tree_build(tree, best.symbols, codes, packed);
-	huffman_encode(codes, best.data, packed);
-
-	#if HUFFMUNCH_DEBUG
-	Stri verify;
-	if (huffmunch_verify(sdata, packed, sdata.size(), verify))
+	if (splits == NULL)
 	{
-		if (verify != sdata)
+		splits = SPLITS_DEFAULT;
+		split_count = 1;
+	}
+	if (!splits_valid(splits, split_count)) return HUFFMUNCH_INVALID_SPLITS;
+
+	try
+	{
+		Stri sdata;
+		unsigned int s=0;
+		for (unsigned int i=0; i<data_size; ++i)
 		{
-			DEBUG_OUT(DBV,"error: verify failed, %d bytes decoded\n",verify.size());
+			if (s < split_count && i == splits[s])
+			{
+				sdata.push_back(EMPTY);
+				++s;
+			}
+			sdata.push_back(elem(data[i]));
+		}
+		for (; s < split_count; ++s) sdata.push_back(EMPTY);
+
+		MunchInput best = huffmunch_optimize(sdata);
+
+		HuffTree tree;
+		unordered_map<elem,HuffCode> codes;
+		vector<u8> packed;
+		vector<uint> packed_splits;
+
+		// header containing:
+		// 1 x split count
+		// split_count x split data offset
+		// split_count x split data size
+		uint prefix_size = ((split_count * 2) + 1) * SPLIT_OFFSET_SIZE;
+		for (uint i=0; i<prefix_size; ++i) packed.push_back(44); // reserve space for header
+
+		huffman_tree(best, tree);
+		huffmunch_tree_build(tree, best.symbols, codes, packed);
+		huffman_encode(codes, best.data, packed, packed_splits);
+
+		DEBUG_OUT(DBH,"split_count: %d\n",split_count);
+		if (!pack_header(split_count, 0, packed)) return HUFFMUNCH_SPLIT_OVERFLOW;
+		for (unsigned int i=0; i<split_count; ++i)
+		{
+			uint split_packed_start = packed_splits[i];
+			uint split_start = splits[i];
+			uint split_end = data_size;
+			if ((i+1) < split_count) split_end = splits[i+1];
+			uint split_size = split_end - split_start;
+
+			DEBUG_OUT(DBH,"split %d: %X (%X, %d bytes)\n",i,split_packed_start,split_start,split_size);
+			if (!pack_header(split_packed_start, 1+i, packed)) return HUFFMUNCH_SPLIT_OVERFLOW;
+			if (!pack_header(split_size, 1+split_count+i, packed)) return HUFFMUNCH_SPLIT_OVERFLOW;
+		}
+
+		#if HUFFMUNCH_DEBUG
+		Stri verify;
+		if (huffmunch_decode(packed, verify))
+		{
+			if (verify != sdata)
+			{
+				DEBUG_OUT(DBV,"error: verify failed, %d bytes decoded\n",verify.size());
+				return HUFFMUNCH_VERIFY_FAIL;
+			}
+		}
+		else
+		{
+			DEBUG_OUT(DBV,"error: verify unable to decode\n");
 			return HUFFMUNCH_VERIFY_FAIL;
 		}
-	}
-	else
-	{
-		DEBUG_OUT(DBV,"error: verify unable to decode\n");
-		return HUFFMUNCH_VERIFY_FAIL;
-	}
-	#endif
+		#endif
 
-	if (packed.size() > output_size)
-	{
+		if (packed.size() > output_size)
+		{
+			output_size = packed.size();
+			return HUFFMUNCH_OUTPUT_OVERFLOW;
+		}
 		output_size = packed.size();
-		return HUFFMUNCH_OUTPUT_OVERFLOW;
+		if (output)
+		{
+			for (unsigned int i=0; i < packed.size(); ++i)
+				output[i] = packed[i];
+		}
 	}
-	output_size = packed.size();
-	if (output)
+	catch (exception e)
 	{
-		for (unsigned int i=0; i < packed.size(); ++i)
-			output[i] = packed[i];
+		DEBUG_OUT(DBI,"error: internal error: %s\n",e.what());
+		return HUFFMUNCH_INTERNAL_ERROR;
 	}
 
 	return HUFFMUNCH_OK;
@@ -1275,12 +1407,36 @@ int huffmunch_decompress(
 	const unsigned char* data,
 	unsigned int data_size,
 	unsigned char* output,
-	unsigned int output_size,
-	const unsigned int* splits,
-	unsigned int split_count)
+	unsigned int& output_size)
 {
-	// TODO
-	return -1;
+	try
+	{
+		vector<u8> packed;
+		for (unsigned int i=0; i<data_size; ++i) packed.push_back(data[i]);
+		assert(packed.size() == data_size);
+
+		Stri unpacked;
+		huffmunch_decode(packed, unpacked);
+
+		unsigned int pos = 0;
+		for (unsigned int i=0; i < unpacked.size(); ++i)
+		{
+			elem v = unpacked[i];
+			if (v != EMPTY)
+			{
+				if (output && pos < output_size) output[pos] = v;
+				++pos;
+			}
+		}
+		if (pos > output_size) return HUFFMUNCH_OUTPUT_OVERFLOW;
+	}
+	catch (exception e)
+	{
+		DEBUG_OUT(DBI,"error: internal error: %s\n",e.what());
+		return HUFFMUNCH_INTERNAL_ERROR;
+	}
+
+	return HUFFMUNCH_OK;
 }
 
 void huffmunch_debug(unsigned int debug_bits_)
