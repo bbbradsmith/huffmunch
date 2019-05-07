@@ -6,6 +6,7 @@
 #include <cstdint>
 #include <algorithm>
 #include <queue>
+#include <set>
 #include <string>
 #include <unordered_map>
 #include <vector>
@@ -24,6 +25,16 @@ const unsigned int MAX_SYMBOL_SIZE = 255;
 // 2 bytes = 64 KB maximum output size
 // 3 bytes = 16 MB maximum output size
 const unsigned int SPLIT_OFFSET_SIZE = 2;
+
+// how many symbols can be combined into a larger one in a single pass (minimum 2)
+// increasing this marginally increases the ability to get over local minima
+// STEP_SIZE 3 is ~1% better compression tham 2, but takes roughly twice as long
+// each subsequent step is about half as effective as the previous, but increases compression time linearly
+// maximum effect is reached around STEP_SIZE 8 where compression gains get lost to estimation noise
+const unsigned int STEP_SIZE = 3;
+
+// how many attempts can be made in a single pass before minima is assumed (0 for no limit)
+const unsigned int CUTOFF = 100;
 
 //
 // type definitions
@@ -52,35 +63,6 @@ static unsigned int debug_bits = 0;
 #else
 #define DEBUG_OUT(...) {}
 #endif
-
-//
-// digraph structure, currently used by the dictionary optimizer
-// TODO replace digraphs concept with a better common substring alhorithm
-//
-
-// number of times a digraph can be tried (increases compression time on the order of RETRIES^2, but might do ~1% better with a few retries)
-#define RETRIES 0
-
-// number of entries to try in a single pass before giving up entirely (a value of 100 ends compression earlier, faster but ~1% worse compression)
-#define CUTOFF 0
-
-typedef pair<elem,elem> Digraph;
-namespace std {
-	template<> struct hash<Digraph>
-	{
-		size_t operator()(Digraph const& x) const
-		{
-			return hash<elem>{}((x.first << 16) ^ x.second); // digraph symbols will never be anywhere near 16 bits wide
-		}
-	};
-}
-template <typename T>
-class Counter : public unordered_map<T,int>
-{
-public:
-	void count(T x) { (*this)[x] += 1; }
-	void count(const vector<T>& s) { for (auto x : s) count(x); }
-};
 
 //
 // BitReader and BitWriter for writing a bitstream to a vector<u8>
@@ -155,6 +137,15 @@ public:
 			write(b);
 		}
 	}
+};
+
+// for counting instances of a hash
+template <typename T>
+class Counter : public unordered_map<T,uint>
+{
+public:
+	void count(T x) { (*this)[x] += 1; } // note: missing value is automatically zero-initialized
+	void count(const vector<T>& s) { for (auto x : s) count(x); }
 };
 
 // variable width integer format, either 8-bit 0-254, or 255,low,high
@@ -247,9 +238,18 @@ static bool print_stri_text = false;
 
 void print_stri_setup(Stri& v)
 {
+	print_stri_text = true;
 	if (v.size() == 0) { print_stri_text = false; return; }
-	auto mm = minmax_element(v.begin(),v.end());
-	print_stri_text = (*mm.first > 9 && *mm.second < 128);
+	for (elem e : v)
+	{
+		if (e == EMPTY) continue;
+		if (e <= 9 || e >= 128)
+		{
+			print_stri_text = false;
+			return;
+		}
+	}
+	return;
 }
 
 void print_stri(const Stri& v)
@@ -1115,11 +1115,11 @@ MunchSize huffmunch_size(const MunchInput& in)
 	return size;
 }
 
-MunchInput huffmunch_optimize(const Stri& data)
+MunchInput huffmunch_munch(const Stri& data)
 {
 	const uint data_total = data.size() * 8;
 
-	// setup initial
+	// setup initial best
 	MunchInput best;
 	best.data = data;
 	elem n = 0;
@@ -1137,120 +1137,181 @@ MunchInput huffmunch_optimize(const Stri& data)
 	}
 	MunchSize best_size = huffmunch_size(best);
 
+	// buffers for storing Rabin-Karp style hashes of various widths for repeated string detection
+	vector<elem> rk[STEP_SIZE-1];
+	Counter<elem> rk_freq[STEP_SIZE-1];
+	const uint RK_PRIME = 467; // rolling hash prime, not a factor of (2^32)-1, "nice" binary representation 111010011
+	uint RK_ERASE[STEP_SIZE-1] = {RK_PRIME};
+	for (int i=1; i<(STEP_SIZE-1); ++i)
+		RK_ERASE[i] = RK_ERASE[i-1] * RK_PRIME;
+
 	Stri last_symbol;
 	uint last_bits_saved = 0;
-	int last_symbol_count = 0;
-	int last_attempt = 0;
+	uint last_symbol_count = 0;
+	uint last_symbol_len = 0;
+	uint last_attempt = 0;
 	uint last_attempt_size = 0;
 	uint last_visit_count = 0;
-	
-	int symbols_added = 0;
+	uint symbols_added = 0;
 	bool minima = false;
-	Counter<Digraph> digraph_attempts;
+
+	set<pair<elem, uint>> hash_tried;
+	set<Stri> hash_strings;
 
 	while (!minima)
 	{
+		// each step:
+		// - analyze current best.data for repeated strings
+		// - make a prioritized list of the repeated strings (guess priority based on frequency/length)
+		// - trial each string until one that decreases the data size is found
+		// - if the data was reduced, repeat the next step
+
 		#if HUFFMUNCH_DEBUG
 		if (debug_bits & DBM)
 		{
 			printf("%d: %d of %d (%d + %d/%d) => %5.2f%% ",
 				symbols_added, best_size.bytes(), bytesize(data_total), bytesize(best_size.stream_bits), best_size.table_bytes, last_visit_count, (100.0 * best_size) / data_total);
-			printf("%4db/%3d %4d>%4d ", last_bits_saved, last_symbol_count, last_attempt_size, last_attempt);
+			printf("%5db/%3d*%1d %4d>%4d ", last_bits_saved, last_symbol_count, last_symbol_len, last_attempt_size, last_attempt);
 			print_stri(last_symbol);
 			printf("\n");
 		}
 		#endif
 
-		// count digraphs in data
-		Counter<Digraph> digraph_counter;
-		const Digraph NO_DIGRAPH(EMPTY,EMPTY);
-		Digraph last_digraph = NO_DIGRAPH;
-		for (uint i=0; i<best.data.size()-1; ++i)
+		// generate rolling hash for several string widths, count their frequency
+
+		for (uint ss=2; ss<=STEP_SIZE; ++ss)
 		{
-			Digraph dg = Digraph(best.data[i],best.data[i+1]);
-			if (dg != last_digraph && dg.first != EMPTY && dg.second != EMPTY)
+			const uint si = ss-2; // index to rk
+			const uint su = ss-1;
+			const uint erase = RK_ERASE[si];
+			const uint rksize = (best.data.size() >= su) ? (best.data.size() - su) : 0;
+			rk[si].resize(rksize);
+			rk_freq[si].clear();
+
+			elem hash = 0;
+			for (uint i=0; i<su; ++i)
 			{
-				digraph_counter.count(dg);
-				last_digraph = dg;
+				hash = (hash * RK_PRIME) + best.data[i];
 			}
-			else last_digraph = NO_DIGRAPH;
+			for (uint i=0; i<rksize; ++i)
+			{
+				hash = (hash * RK_PRIME) + best.data[i+su];
+				rk[si][i] = hash;
+				rk_freq[si].count(hash);
+				hash -= best.data[i] * erase; // roll off
+			}
 		}
 
-		// build queue of potential digraph symbols to try
-		typedef tuple<int,uint,Digraph> DigraphTask;
+		// prioritize hashes by potential bytes replaced (rough estimate of size saved, not accounting for the huffman coding/dictionary)
 
-		// TODO custom compare that ignores the digraph seems to do better? kinda weird
-		// i think it's because it slightly favours newly created symbols otherwise, which apparently hurts slightly
-		// i think it sort of accelerates the "annealing" in a way?
-		auto task_compare = [](const DigraphTask& a, const DigraphTask& b)
+		typedef tuple<uint, uint, elem> Task; // < bytes saved, string length, hash >
+		auto task_less = [](const Task& a, const Task& b)
 		{
-			return (get<0>(a) != get<0>(b)) ? (get<0>(a) < get<0>(b)) : (get<1>(a) < get<1>(b));
+			return (get<0>(a) != get<0>(b)) ?
+				(get<0>(a) < get<0>(b)) : // favour more bytes saved
+				(get<1>(a) > get<1>(b)) ; // otherwise favour shorter strings
 		};
-		priority_queue<DigraphTask, std::vector<DigraphTask>, decltype(task_compare)> task_queue(task_compare);
-		//priority_queue<DigraphTask> task_queue;
+		priority_queue<Task, std::vector<Task>, decltype(task_less)> task_queue(task_less);
+		task_queue.empty();
 
-		for (pair<Digraph,int> dgc : digraph_counter)
+		for (uint ss=2; ss<=STEP_SIZE; ++ss)
 		{
-			int count = dgc.second;
-			if (count < 1) continue;
-
-			Digraph dg = dgc.first;
-
-			int attempts = digraph_attempts[dg];
-			if (attempts > RETRIES) continue;
-
-			uint length = best.symbols[dg.first].size() + best.symbols[dg.second].size();
-			DigraphTask task = DigraphTask(-attempts, count, dg);
-
-			task_queue.push(task);
+			const uint si = ss-2; // index to rk
+			const uint su = ss-1;
+			for (pair<elem, uint> rkf : rk_freq[si])
+			{
+				elem hash = rkf.first;
+				uint count = rkf.second;
+				if (count < 1) continue;
+				Task task = Task(count*su, si, hash);
+				if (0 == hash_tried.count(pair<elem,uint>(hash,si)))
+				{
+					task_queue.push(task);
+				}
+			}
 		}
+
+		// trial each task in order of priority
+
+		minima = true;
 		last_attempt = 0;
 		last_attempt_size = task_queue.size();
 
-		minima = true;
 		while (task_queue.size() > 0)
 		{
-			DigraphTask task = task_queue.top();
+			Task task = task_queue.top();
 			task_queue.pop();
-			Digraph dg = get<2>(task);
-			digraph_attempts.count(dg);
+			const uint bsave = get<0>(task);
+			const uint si = get<1>(task);
+			const elem hash = get<2>(task);
+			const uint su = si+1;
+			const uint ss = si+2;
 
-			Stri next_symbol = best.symbols[dg.first] + best.symbols[dg.second];
-			last_symbol = next_symbol;
-			last_symbol_count = digraph_counter[dg];
-
-			if (next_symbol.size() < MAX_SYMBOL_SIZE)
+			// hashes can have collisions, so find all strings with this hash
+			hash_strings.clear();
+			for (uint i=su; i<rk[si].size(); ++i)
 			{
+				if (rk[si][i] == hash)
+				{
+					Stri s = Stri(best.data.c_str()+i,ss);
+					hash_strings.insert(s);
+				}
+			}
+
+			// try each of these strings
+			for (Stri s : hash_strings)
+			{
+				if (string::npos != s.find(EMPTY)) continue; // don't allow splits to be included in compression
+
+				Stri next_symbol = best.symbols[s[0]];
+				for (uint i=1; i<s.size(); ++i)
+					next_symbol = next_symbol + best.symbols[s[i]];
+				if (next_symbol.size() >= MAX_SYMBOL_SIZE) continue;
+				// really MAX_SYMBOL_SIZE applies to the finished tree symbol, which could be shortened as a prefix
+				// but it's probably "good enough" to enforce this here instead.
+
+				#if HUFFMUNCH_DEBUG
+				if ((debug_bits & DBM) && false) // for debugging all attempts
+				{
+					printf("%4d: %5d (%4d*%1d) %08X ",last_attempt, bsave, bsave/su, ss, hash);
+					print_stri(next_symbol);
+					printf("\n");
+				}
+				#endif
+
 				MunchInput next;
 
-				// add a new symbol to replace the digraph
+				// add a new symbol to the tree
 				next.symbols = best.symbols;
 				elem n = next.symbols.size();
 				next.symbols.push_back(next_symbol);
 
-				// create the new replaced data
+				// create the data, replacing the matched string with the new symbol
 				next.data.reserve(best.data.size());
-				uint i=1;
-				for (; i < best.data.size(); ++i)
+				uint i=0;
+				for (; i<rk[si].size(); ++i)
 				{
-					elem a = best.data[i-1];
-					elem b = best.data[i-0];
-					if (Digraph(a,b) == dg)
+					const elem o = best.data[i];
+					if(rk[si][i] == hash && Stri(best.data.c_str()+i,ss) == s)
 					{
 						next.data.push_back(n);
-						++i; // 2 symbols became 1
+						i += su;
 					}
 					else
 					{
-						next.data.push_back(a);
+						next.data.push_back(o);
 					}
 				}
-				if (i == best.data.size() && best.data.size() > 0) // 1 leftover symbol
+				for (; i < best.data.size(); ++i) // trailing bytes of the last unmatched symbol
 				{
-					next.data.push_back(best.data[best.data.size()-1]);
+					next.data.push_back(best.data[i]);
 				}
 
-				// see if it will be smaller, keep it if it is
+				last_symbol = next_symbol;
+				last_symbol_count = bsave / su;
+				last_symbol_len = ss;
+
+				// test the actual finished size of the new data and tree
 				MunchSize next_size = huffmunch_size(next);
 				if (next_size < best_size)
 				{
@@ -1262,10 +1323,20 @@ MunchInput huffmunch_optimize(const Stri& data)
 					break;
 				}
 			}
+
+			if (!minima) break;
+
+			// all strings of this hash have been tried, add it to the exhausted list
+			// (this could be a false positive if the a new symbol causes a hash collision,
+			// but that has low probability and the speed gain by ignoring this seems worthwhile)
+			hash_tried.insert(pair<elem,uint>(hash,si));
+
 			++last_attempt;
-			if (CUTOFF && last_attempt > CUTOFF) break;
-		}
-	}
+			if (CUTOFF && last_attempt >= CUTOFF) break;
+
+		} // while (task_queue.size() > 0)
+	} // while (minima)
+
 	return best;
 }
 
@@ -1338,7 +1409,11 @@ int huffmunch_compress(
 		}
 		for (; s < split_count; ++s) sdata.push_back(EMPTY);
 
-		MunchInput best = huffmunch_optimize(sdata);
+		#if HUFFMUNCH_DEBUG
+		print_stri_setup(sdata);
+		#endif
+
+		MunchInput best = huffmunch_munch(sdata);
 
 		HuffTree tree;
 		unordered_map<elem,HuffCode> codes;

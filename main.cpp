@@ -37,7 +37,7 @@ int huffmunch_file(const char* file_in, const char* file_out)
 	}
 	fread(buffer_in,1,size_in,f);
 	fclose(f);
-	printf("%d bytes read from %s\n", size_in, file_in);
+	printf("%6d bytes read from %s\n", size_in, file_in);
 
 	int result = huffmunch_compress(buffer_in, size_in, buffer_out, size_out, NULL, 0);
 	if (result != HUFFMUNCH_OK)
@@ -45,7 +45,7 @@ int huffmunch_file(const char* file_in, const char* file_out)
 		printf("error: compression error %d: %s\n", result, huffmunch_error_description(result));
 		return result;
 	}
-	printf("%d bytes compressed\n", size_out);
+	printf("%6d bytes compressed: %6.2f%%\n", size_out, (100.0 * size_out)/size_in);
 
 	f = fopen(file_out, "wb");
 	if (f == NULL)
@@ -56,7 +56,7 @@ int huffmunch_file(const char* file_in, const char* file_out)
 	}
 	fwrite(buffer_out,1,size_out,f);
 	fclose(f);
-	printf("%d bytes written to %s\n", size_out, file_out);
+	printf("%6d bytes written to %s\n", size_out, file_out);
 	free(buffer_in);
 
 	return 0;
@@ -64,7 +64,8 @@ int huffmunch_file(const char* file_in, const char* file_out)
 
 int main(int argc, char** argv)
 {
-	huffmunch_debug(HUFFMUNCH_DEBUG_FULL);
+	//huffmunch_debug(HUFFMUNCH_DEBUG_FULL);
+	huffmunch_debug(HUFFMUNCH_DEBUG_MUNCH);
 
 	#if HUFFMUNCH_CANONICAL
 		#define TS ".hfc"
