@@ -79,8 +79,4 @@ const unsigned int HUFFMUNCH_DEBUG_FULL      = 0xFFFFFFFFUL;
 //    -1 = auto
 extern void huffmunch_debug(unsigned int debug_bits, int text=-1);
 
-// huffmunch_dot
-//   prints DOT graph output for GraphViz
-extern void huffmunch_dot(const unsigned char* data, unsigned int data_size, bool text);
-
 // end of file
