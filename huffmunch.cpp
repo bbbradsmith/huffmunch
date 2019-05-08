@@ -56,9 +56,11 @@ const unsigned int DBM = HUFFMUNCH_DEBUG_MUNCH;
 const unsigned int DBV = HUFFMUNCH_DEBUG_VERIFY;
 const unsigned int DBI = HUFFMUNCH_DEBUG_INTERNAL;
 const unsigned int DBH = HUFFMUNCH_DEBUG_HEADER;
+const unsigned int DBD = HUFFMUNCH_DEBUG_DOT;
 
 #if HUFFMUNCH_DEBUG
 static unsigned int debug_bits = 0;
+static int debug_text = -1;
 #define DEBUG_OUT(bits_,...) { if(debug_bits & (bits_)) { printf(__VA_ARGS__); } }
 #else
 #define DEBUG_OUT(...) {}
@@ -232,12 +234,24 @@ inline uint bytesize(uint bits)
 
 #if HUFFMUNCH_DEBUG
 
+struct DotNode
+{
+	string name;
+	Stri symbol;
+	Stri prefix;
+	uint c0;
+	uint c1;
+};
+
 // print a vector sequence
 // simple heuristic to decide whether to display print_stri as text or integer sequence
 static bool print_stri_text = false;
 
 void print_stri_setup(Stri& v)
 {
+	if (debug_text == 0) { print_stri_text = false; return; }
+	if (debug_text == 1) { print_stri_text = true;  return; }
+
 	print_stri_text = true;
 	if (v.size() == 0) { print_stri_text = false; return; }
 	for (elem e : v)
@@ -252,23 +266,61 @@ void print_stri_setup(Stri& v)
 	return;
 }
 
-void print_stri(const Stri& v)
+string string_stri(const Stri& v)
 {
-	printf("[");
+	string s = "[";
+	char hex[3] = {0,0,0};
+
 	for (uint i=0; i<v.size(); ++i)
 	{
 		auto c = v[i];
 		if (!print_stri_text)
 		{
-			if (i != 0) printf(",");
-			printf("%d",u8(c));
+			if (i != 0) s.push_back(',');
+			do
+			{
+				snprintf(hex, 3, "%02X", uint(c & 255));
+				s.append(hex);
+				c >>= 8;
+			} while (c > 0);
 		}
 		else
 		{
-			printf("%c",(c >= 32 && c < 128) ? u8(c) : '*');
+			if (c < 32 || c >= 127) c = '*';
+			s.push_back(u8(c));
 		}
 	}
-	printf("]");
+
+	s.push_back(']');
+	return s;
+}
+
+void print_stri(const Stri& v)
+{
+	printf(string_stri(v).c_str());
+}
+
+string string_escape(const string s)
+{
+	string o;
+	for (char c : s)
+	{
+		switch (c)
+		{
+			case '\\':
+				o.push_back('\\');
+				o.push_back('\\');
+				break;
+			case '"':
+				o.push_back('\\');
+				o.push_back('"');
+				break;
+			default:
+				o.push_back(c);
+				break;
+		}
+	}
+	return o;
 }
 
 #else
@@ -653,7 +705,7 @@ void huffmunch_tree_build(const HuffTree& tree, const vector<Stri>& symbols, uno
 	{
 		assert (string_position.find(f.e) != string_position.end());
 		uint link = string_position[f.e];
-		if (link >= (1<<16)) throw exception("Unexpectedly large canonical dictionary suffix reference.");
+		if (link >= (1<<16)) throw exception("Unexpectedly large dictionary suffix reference.");
 		assert (output[f.position+0] == 42);
 		assert (output[f.position+1] == 43);
 		output[f.position+0] = link & 255;
@@ -776,6 +828,81 @@ bool huffmunch_decode(const vector<u8>& packed, Stri& unpacked)
 
 	return true;
 }
+
+#if HUFFMUNCH_DEBUG
+uint huffmunch_dot_node(uint pos, uint root, vector<u8>& data, string bits, vector<DotNode>& pool)
+{
+	uint index = pool.size();
+	pool.push_back(DotNode());
+	DotNode& node = pool.back();
+
+	node.name = (bits.length() > 0) ? bits : "root";
+	node.c0 = 0;
+	node.c1 = 0;
+
+	u8 t = data[pos];
+
+	if (t >= 3)
+	{
+		uint l = 1;
+		uint r = l + t - 1;
+		if (t == 255)
+		{
+			l = 3;
+			r = l + (data[pos+1] + (data[pos+2] << 8));
+		}
+		uint c0 = huffmunch_dot_node(pos+l, root, data, bits+"0", pool);
+		uint c1 = huffmunch_dot_node(pos+r, root, data, bits+"1", pool);
+		// note: node's address has been invalidated
+		pool[index].c0 = c0;
+		pool[index].c1 = c1;
+		return index;
+	}
+
+	if (t == 0)
+	{
+		node.symbol.assign(data.begin()+pos+1, data.begin()+pos+2);
+		return index;
+	}
+	else if (t == 1)
+	{
+		u8 len = data[pos+1];
+		node.symbol.assign(data.begin()+pos+2, data.begin()+pos+2+len);
+		return index;
+	}
+
+	u8 len = data[pos+1];
+	uint next = data[pos+2+len] + (data[pos+3+len] << 8);
+	node.prefix.assign(data.begin()+pos+2, data.begin()+pos+2+len);
+	node.symbol.assign(node.prefix);
+	do
+	{
+		pos = next;
+		t = data[pos];
+		assert(t < 3);
+		if (t == 0)
+		{
+			node.symbol.push_back(data[pos+1]);
+			break;
+		}
+		else if (t == 1)
+		{
+			len = data[pos+1];
+			node.symbol.append(data.begin()+pos+2, data.begin()+pos+2+len);
+			break;
+		}
+		else if (t == 2)
+		{
+			len = data[pos+1];
+			next = data[pos+2+len] + (data[pos+3+len] << 8);
+			node.symbol.append(data.begin()+pos+2, data.begin()+pos+2+len);
+		}
+		else break; // shouldn't happen
+	} while (t == 2);
+
+	return index;
+}
+#endif // HUFFMUNCH_DEBUG
 
 #else // else if HUFFMUNCH_CANONICAL
 
@@ -1433,6 +1560,11 @@ int huffmunch_compress(
 
 		DEBUG_OUT(DBH,"split_count: %d\n",split_count);
 		if (!pack_header(split_count, 0, packed)) return HUFFMUNCH_SPLIT_OVERFLOW;
+
+		#if HUFFMUNCH_DEBUG
+		if (debug_bits & DBD) huffmunch_dot(&packed[0],packed.size(),print_stri_text);
+		#endif
+
 		for (unsigned int i=0; i<split_count; ++i)
 		{
 			uint split_packed_start = packed_splits[i];
@@ -1520,9 +1652,80 @@ int huffmunch_decompress(
 	return HUFFMUNCH_OK;
 }
 
-void huffmunch_debug(unsigned int debug_bits_)
+void huffmunch_debug(unsigned int debug_bits_, int text)
 {
 	debug_bits = debug_bits_;
+	debug_text = text;
+}
+
+void huffmunch_dot(
+	const unsigned char* data,
+	unsigned int data_size,
+	bool text)
+{
+	#if HUFFMUNCH_DEBUG
+	vector<u8> packed;
+	for (unsigned int i=0; i<data_size; ++i) packed.push_back(data[i]);
+	assert(packed.size() == data_size);
+
+	printf("digraph G {\n");
+	printf("\tnode [shape=box style=filled]\n");
+
+	uint count = unpack_header(0,packed);
+	uint tree_pos = ((count * 2) + 1) * SPLIT_OFFSET_SIZE;
+	vector<DotNode> tree;
+	huffmunch_dot_node(tree_pos, tree_pos, packed, "", tree);
+	for (const DotNode& node : tree)
+	{
+		string colour = "#EEEEEE";
+		char ne = node.name[node.name.length()-1];
+		if (ne == '0') colour = "#FFDDDD";
+		if (ne == '1') colour = "#DDFFCC";
+
+		string label = node.name;
+		if (node.symbol.length() > 0)
+		{
+			colour = "#FFEE88";
+			label += "\\n";
+			label += string_escape(string_stri(node.symbol));
+			label += "";
+		}
+		if (node.prefix.length() > 0)
+		{
+			colour = "#FFEEBB";
+			label += "\\n";
+			label += string_escape(string_stri(node.prefix));
+			label += "...";
+		}
+
+		printf("\t%s [label=\"%s\" fillcolor=\"%s\"]\n",
+			node.name.c_str(),
+			label.c_str(),
+			colour.c_str());
+
+		if (node.c0) printf("\t%s -> %s\n",node.name.c_str(),tree[node.c0].name.c_str());
+		if (node.c1) printf("\t%s -> %s\n",node.name.c_str(),tree[node.c1].name.c_str());
+
+		if (node.prefix.length() > 0)
+		{
+			assert(node.prefix.length() < node.symbol.length());
+			Stri suffix(node.symbol.begin() + node.prefix.length(), node.symbol.end());
+			for (const DotNode& match : tree)
+			{
+				if (match.symbol == suffix)
+				{
+					colour = "#CCCCCC";
+					printf("\t%s -> %s [color=\"%s\" constraint=false]\n",
+						node.name.c_str(),
+						match.name.c_str(),
+						colour.c_str());
+				}
+			}
+		}
+	}
+	
+	printf("}\n");
+	#endif
 }
 
 // end of file

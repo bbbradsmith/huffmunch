@@ -67,11 +67,20 @@ const unsigned int HUFFMUNCH_DEBUG_MUNCH     = 0x00000002UL;
 const unsigned int HUFFMUNCH_DEBUG_VERIFY    = 0x00000004UL;
 const unsigned int HUFFMUNCH_DEBUG_INTERNAL  = 0x00000008UL;
 const unsigned int HUFFMUNCH_DEBUG_HEADER    = 0x00000010UL;
+const unsigned int HUFFMUNCH_DEBUG_DOT       = 0x00000020UL;
 const unsigned int HUFFMUNCH_DEBUG_FULL      = 0xFFFFFFFFUL;
 
 // huffmunch_debug
 //   debug_level
 //     parameter for debug output
-extern void huffmunch_debug(unsigned int debug_bits);
+//   text
+//     1 = display symbols as text
+//     0 = display symbols as hex
+//    -1 = auto
+extern void huffmunch_debug(unsigned int debug_bits, int text=-1);
+
+// huffmunch_dot
+//   prints DOT graph output for GraphViz
+extern void huffmunch_dot(const unsigned char* data, unsigned int data_size, bool text);
 
 // end of file
