@@ -203,6 +203,11 @@ int huffmunch_list(const char* list_file, const char* out_file)
 	bank.resize(bank_size);
 	unsigned int bank_split_index = 0;
 
+	unsigned int total_used = 0;
+	unsigned int total_unused = 0;
+	unsigned int last_used = 0;
+	unsigned int last_unused = 0;
+
 	strcpy(line,"no bank generated\n");
 
 	for (unsigned int i=0; i<entries.size(); ++i)
@@ -230,6 +235,9 @@ int huffmunch_list(const char* list_file, const char* out_file)
 		if (result == HUFFMUNCH_OUTPUT_OVERFLOW) // start a new bank if it doesn't fit
 		{
 			if (!verbose) printf(line);
+
+			total_used += last_used;
+			total_unused += last_unused;
 
 			++current_bank;
 			bank_split_index = i;
@@ -266,8 +274,13 @@ int huffmunch_list(const char* list_file, const char* out_file)
 
 		snprintf(line, sizeof(line), "%s: %d - %d (%d bytes)\n", bank_file, bank_split_index, i, result_size);
 		if (verbose) printf(line);
+
+		last_used = result_size;
+		last_unused = bank_size - result_size;
 	}
 	if (!verbose) printf(line);
+	total_used += last_used;
+	total_unused += last_unused;
 	bank_splits.push_back(entries.size());
 	printf("%d banks output\n", bank_splits.size());
 
@@ -295,6 +308,11 @@ int huffmunch_list(const char* list_file, const char* out_file)
 	}
 	fclose(fo);
 	printf("bank end table written to %s\n", out_file);
+
+	unsigned int total_size = total_used + total_unused;
+	printf("%5d bytes input\n", data.size());
+	printf("%5d bytes output   %6.2f%%\n", total_used, (100.0 * total_used) / data.size());
+	printf("%5d bytes in banks %6.2f%% (%d unused)\n", total_size, (100.0 * total_size) / data.size(), total_unused);
 
 	return 0;
 }
