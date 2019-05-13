@@ -82,6 +82,7 @@ int huffmunch_list(const char* list_file, const char* out_file)
 	};
 
 	unsigned int bank_size;
+	unsigned int bank_max;
 	vector<Entry> entries;
 	vector<unsigned char> data;
 	vector<unsigned int> splits;
@@ -101,8 +102,17 @@ int huffmunch_list(const char* list_file, const char* out_file)
 		fclose(fl);
 		return -1;
 	}
+	char* next;
 	errno = 0;
-	bank_size = strtoul(line, NULL, 0);
+	bank_max = strtoul(line, &next, 0);
+	if (errno)
+	{
+		printf("error: unable to read bank count from list file line 1\n");
+		fclose(fl);
+		return -1;
+	}
+	errno = 0;
+	bank_size = strtoul(next, &next, 0);
 	if (errno)
 	{
 		printf("error: unable to read bank size from list file line 1\n");
@@ -122,8 +132,6 @@ int huffmunch_list(const char* list_file, const char* out_file)
 			--i;
 		}
 		if (line[0] == 0) continue; // blank lines skipped
-
-		char* next;
 
 		errno = 0;
 		int start = strtol(line, &next, 0);
@@ -155,6 +163,7 @@ int huffmunch_list(const char* list_file, const char* out_file)
 	fclose(fl);
 	printf("%d entries read from %s\n", entries.size(), list_file);
 	printf("bank size: %d\n", bank_size);
+	if (bank_max < 1) bank_max = 1<<16; // "unlimited"
 
 	// collect data
 
@@ -215,6 +224,8 @@ int huffmunch_list(const char* list_file, const char* out_file)
 		const Entry& e = entries[i];
 		unsigned int current_bank = bank_splits.size();
 
+		if (bank_max == 1) i = entries.size() - 1; // accelerate single bank
+
 		unsigned int data_start = splits[bank_split_index];
 		unsigned int data_end = data.size();
 		if ((i+1) < entries.size()) data_end = splits[i+1];
@@ -243,6 +254,12 @@ int huffmunch_list(const char* list_file, const char* out_file)
 			bank_split_index = i;
 			bank_splits.push_back(i);
 			data_start = splits[bank_split_index];
+
+			if (current_bank >= bank_max)
+			{
+				printf("error: out of available banks\n");
+				return -1;
+			}
 
 			result = huffmunch_compress(
 				data.data()+data_start,data_end-data_start,
@@ -310,9 +327,9 @@ int huffmunch_list(const char* list_file, const char* out_file)
 	printf("bank end table written to %s\n", out_file);
 
 	unsigned int total_size = total_used + total_unused;
-	printf("%5d bytes input\n", data.size());
-	printf("%5d bytes output   %6.2f%%\n", total_used, (100.0 * total_used) / data.size());
-	printf("%5d bytes in banks %6.2f%% (%d unused)\n", total_size, (100.0 * total_size) / data.size(), total_unused);
+	printf("%7d bytes input\n", data.size());
+	printf("%7d bytes output   %6.2f%%\n", total_used, (100.0 * total_used) / data.size());
+	printf("%7d bytes in banks %6.2f%% (%d unused in %d banks)\n", total_size, (100.0 * total_size) / data.size(), total_unused, bank_splits.size());
 
 	return 0;
 }
@@ -332,15 +349,22 @@ int print_usage()
 		"\n");
 	printf(
 		"List files are a simple text format:\n"
-		"    The first line is a single integer, specifying bank size,\n"
-		"    which will split the output across several files:\n"
+		"    Line 1: [banks] [bank size]\n"
+		"        banks (int) - maximum number of banks to split output into\n"
+		"                      use 0 for unlimited banks\n"
+		"                      use 1 if multiple banks are not needed (faster)\n"
+		"        bank size (int) - how many bytes allowed in each bank\n"
+		"    Lines 2+: [start] [end] [file]\n"
+		"        start (int) - first byte to read from file\n"
+		"        end (int) - last byte to read from file + 1\n"
+		"                    use -1 to read the whole file\n"
+		"        file - name of file extends to end of line\n"
+		"    The input sources will be compressed together and packed into banks.\n"
+		"    Integers can be decimal, hexadecimal (0x prefix), or octal (0 prefix).\n"
+		"    Example output:\n"
 		"        out.hfm - a table of %d-byte integer giving the end index of each bank\n"
 		"        out0000.hfm - the first bank\n"
 		"        out0001.hfm - the second bank\n"
-		"        etc...\n"
-		"    Subsequent lines contain 2 integers, separated by whitespace, then a filename.\n"
-		"    Each of these specifies a binary file input with a start and end byte.\n"
-		"    Use 0 -1 to use the whole file.\n"
 		"\n", HUFFMUNCH_HEADER_INTEGER_SIZE);
 	printf("huffmunch version %d.%d (%s%s)\n",
 		VERSION_MAJOR, VERSION_MINOR,
