@@ -1524,8 +1524,10 @@ int huffmunch_decompress(
 
 void huffmunch_debug(unsigned int debug_bits_, int text)
 {
+	#if HUFFMUNCH_DEBUG
 	debug_bits = debug_bits_;
 	debug_text = text;
+	#endif
 }
 
 // end of file
