@@ -202,6 +202,12 @@ int huffmunch_list(const char* list_file, const char* out_file)
 
 	// compress and output banks
 
+	// This will compress many times, adding one source entry to the bank each time,
+	// until the bank overflows and it begins a new one. Could do this faster with
+	// a more intelligent search (e.g. starting estimate at ~60% of input size and
+	// binary search for a split-point from there), but this linear search was simple
+	// to implement.
+
 	const char* out_ext = strrchr(out_file, '.');
 	if (out_ext == NULL) out_ext = out_file + strlen(out_file);
 	string out_prefix = string(out_file, out_ext-out_file);
