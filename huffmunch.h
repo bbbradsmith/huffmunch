@@ -8,6 +8,14 @@
 // but takes much, much longer to decode (not recommended)
 #define HUFFMUNCH_CANONICAL 0
 
+// Headers and bank tables will use this size for integers.
+// 2 bytes = 64 KB maximum output size
+// 3 bytes = 16 MB maximum output size
+#define HUFFMUNCH_HEADER_INTEGER_SIZE 2
+
+// setting this to 0 disables the effect of huffmunch_debug() and removes some redundant checks
+#define HUFFMUNCH_DEBUG 1
+
 // huffmunch_compress return values
 const int HUFFMUNCH_OK = 0;
 const int HUFFMUNCH_OUTPUT_OVERFLOW = 1; // too much data for output buffer

@@ -14,17 +14,13 @@ using namespace std;
 
 #include "huffmunch.h"
 
-// setting this disables the effect of huffmunch_debug()
-// and removes some redundant checks
-#define HUFFMUNCH_DEBUG 1
-
 // the longest allowed length of a dictionary symbol
 const unsigned int MAX_SYMBOL_SIZE = 255;
 
 // size of allowed offset splits
 // 2 bytes = 64 KB maximum output size
 // 3 bytes = 16 MB maximum output size
-const unsigned int SPLIT_OFFSET_SIZE = 2;
+const unsigned int SPLIT_OFFSET_SIZE = HUFFMUNCH_HEADER_INTEGER_SIZE;
 
 // how many symbols can be combined into a larger one in a single pass (minimum 2)
 // increasing this marginally increases the ability to get over local minima
@@ -656,7 +652,8 @@ void huffmunch_tree_build(const HuffTree& tree, const vector<Stri>& symbols, uno
 	for (Fixup f : fixup)
 	{
 		assert (string_position.find(f.e) != string_position.end());
-		uint link = string_position[f.e];
+		assert (string_position[f.e] >= tree_pos);
+		uint link = string_position[f.e] - tree_pos;
 		if (link >= (1<<16)) throw exception("Unexpectedly large dictionary suffix reference.");
 		assert (output[f.position+0] == 42);
 		assert (output[f.position+1] == 43);
@@ -762,7 +759,7 @@ bool huffmunch_decode(const vector<u8>& packed, Stri& unpacked)
 
 				if (skip == 2)
 				{
-					uint suffix_pos = packed[pos+0] + (packed[pos+1] << 8);
+					uint suffix_pos = packed[pos+0] + (packed[pos+1] << 8) + table_pos;
 					pos = suffix_pos;
 					DEBUG_OUT(DBV,"(%d),",pos);
 					skip = packed[pos]; ++pos;
@@ -944,7 +941,8 @@ void huffmunch_tree_build(const HuffTree& tree, const vector<Stri>& symbols, uno
 	for (Fixup f : fixup)
 	{
 		assert (string_position.find(f.e) != string_position.end());
-		uint link = string_position[f.e];
+		assert (string_position[f.e] >= tree_pos);
+		uint link = string_position[f.e] - tree_pos;
 		if (link >= (1<<16)) throw exception("Unexpectedly large canonical dictionary suffix reference.");
 		assert (output[f.position+0] == 42);
 		assert (output[f.position+1] == 43);
@@ -1087,7 +1085,7 @@ bool huffmunch_decode(const vector<u8>& packed, Stri& unpacked)
 						--length;
 					}
 					// repeat loop from new suffix string
-					uint suffix_pos = packed[pos+0] + (packed[pos+1] << 8);
+					uint suffix_pos = packed[pos+0] + (packed[pos+1] << 8) + table_pos;
 					pos = suffix_pos;
 					remains = true;
 					DEBUG_OUT(DBV,"(%d),",pos);
@@ -1360,7 +1358,7 @@ bool splits_valid(const unsigned int* splits, unsigned int split_count)
 	}
 	for (unsigned int i=1; i<split_count; ++i)
 	{
-		if (splits[i] < splits[i+1])
+		if (splits[i] < splits[i-1])
 		{
 			DEBUG_OUT(DBV,"splits must be in increasing order");
 			return false;
@@ -1377,7 +1375,7 @@ const char* huffmunch_error_description(int e)
 	case HUFFMUNCH_OUTPUT_OVERFLOW: return "Output data too large for buffer.";
 	case HUFFMUNCH_VERIFY_FAIL: return "Internal verification error.";
 	case HUFFMUNCH_INTERNAL_ERROR: return "Internal error.";
-	case HUFFMUNCH_INVALID_SPLITS: return "Splits must only increase in valid, beginning with 0.";
+	case HUFFMUNCH_INVALID_SPLITS: return "Splits must have increasing order, beginning with 0.";
 	case HUFFMUNCH_SPLIT_OVERFLOW: return "Split offset or data size too large for SPLIT_OFFSET_SIZE.";
 	default: return "Unknown error value.";
 	}
