@@ -1,0 +1,151 @@
+Huffmunch Output Data Format
+============================
+
+The compressed output bank has three parts:
+
+1. Header - describes the location and size of the stored bitstreams
+2. Tree - describes how to decode the bitstreams
+3. Bitstreams - the data to be decoded
+
+A multibank output has an extra bank table in a separate file:
+
+4. Bank Table - table for determining the bank each bitstream resides in
+
+
+
+There are 3 data types that appear in this document:
+
+HEAD = unsigned 16 or 24 bit integer (see: HUFFMUNCH_HEADER_INTEGER_SIZE)
+BYTE = unsigned 8-bit integer
+WORD = unsigned 16-bit integer
+INTX = BYTE (if 0-254), or BYTE 255 followed by WORD
+STREAM = bitstream
+
+
+
+Header
+======
+
+1. HEAD - how many streams of data are contained
+2. HEAD x count - beginning of each data stream, relative to start of header
+3. HEAD x count - size of each data stream
+
+The header is designed so that it could easily be omitted from the output,
+if the user wants to encode the positions in a different way. For example,
+in many situations the length of uncompressed data may already be known.
+
+To accomplish that, any offsets in the tree section of the data are relative to the tree,
+rather than the start of the output binary, so the entire header can safely be stripped
+if not needed.
+
+Also, the start of the first bitstream can be found immediately following the
+tree structure. In standard form, this can be found taking right nodes until
+finding a leaf, then advancing to the end of that leaf's data. In canonical form,
+the end of the tree simply follows the string table.
+
+
+
+Standard Tree
+=============
+
+The head node of the tree appears immediately following the header.
+There are several types of node, identified by their first byte.
+
+
+Node 0: leaf, a single byte to emit
+
+1. BYTE - 0
+2. BYTE - byte to emit
+
+
+Node 1: leaf, a string of bytes to emit
+
+1. BYTE - 1
+2. BYTE - length of string (1-255)
+3. BYTE x length - bytes to emit
+
+
+Node 2: leaf, a string prefix to emit followed by a link to another leaf
+After emitting the byte string contained in this leaf, jump to
+
+1. BYTE - 2
+2. BYTE - length of prefix (1-255)
+3. BYTE x length - bytes to emit
+4. WORD - offset to another leaf, relative to head of tree
+
+
+Node 3-254: short branch
+This node branches to two other nodes, selected by the next bit in the bitstream.
+The left branch is taken by a 0, and the right branch by a 1.
+
+1. BYTE - 3-254 offset to right node
+
+The left node begins at this node + 1.
+The right node begins at this node + offset.
+
+
+Node 255: long branch
+Similar to the short branch, but the first byte of 255 indicates a 16-bit offset.
+
+1. INTX - offset to right node
+
+The left node begins at this node + 3.
+The right node begins at this node + 3 + offset.
+
+
+
+Canonical Tree
+==============
+
+The canonical tree is a slightly smaller representation of the huffman tree,
+but it is much slower to decode. All of the leaves are placed in their leftmost
+position, allowing the branch nodes to be implied rather than explicit.
+
+
+The table begins with a description of how many levels the tree has,
+and how many leaves are present at each level.
+
+1. INTX - depth of tree
+2. INTX x depth - number of leaves at each level of the tree
+
+
+Following the tree description is a table of output strings in canonical order.
+There are two types of strings:
+
+
+1. BYTE - 1-255 - length of string
+2. Bytes x length - bytes to emit
+
+1. BYTE - 0
+2. BYTE - length of prefix
+3. BYTE x length - bytes to emit
+4. WORD - offset to another string, relative to start of tree data
+
+
+
+Bitstream
+=========
+
+Each stored bitstream begins on a byte boundary, specified in the header section.
+Bits of the stream are stored in each byte starting with the least significant bit first.
+
+For each bit read, take the corresponding left or right branch of the tree until a
+leaf is found, then emit the string designated by that leaf, before returning to the
+head of the tree.
+
+Note that if a tree contains only a single leaf, no bits are needed to encode it.
+For this degenerate case, the same symbol should be emitted as many times as needed
+to fill up the length of uncompressed data specified by the header.
+
+
+
+Bank Table
+==========
+
+This is a simple list of integers.
+
+1. HEAD x number of banks - index of first entry in the next bank
+
+To find which bank a given entry resides in, compare its index against that bank's integer.
+If the index is less than that integer, it is in this bank. Otherwise, advance to the next bank.
+
