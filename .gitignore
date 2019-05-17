@@ -3,3 +3,5 @@ Debug/
 Release/
 *.user
 test/
+cmd.exe.lnk
+danger/output/

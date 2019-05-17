@@ -1,6 +1,13 @@
 Huffmunch Output Data Format
 ============================
 
+Huffmunch is a compression format that implements huffman coding,
+but with output symbols that can be multiple bytes, and can share suffixes.
+This allows better compression than huffman alone, as the enlarged symbols
+and shared suffixes provide a dictionary mechanism similar to that used
+in LZ compression methods, but with extremely small memory requirements.
+
+
 The compressed output bank has three parts:
 
 1. Header - describes the location and size of the stored bitstreams
