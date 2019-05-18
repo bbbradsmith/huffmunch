@@ -73,7 +73,7 @@ Node 1: leaf, a string of bytes to emit
 
 
 Node 2: leaf, a string prefix to emit followed by a link to another leaf
-After emitting the byte string contained in this leaf, jump to
+After emitting the byte string contained in this leaf, jump to the new leaf and emit it.
 
 1. BYTE - 2
 2. BYTE - length of prefix (1-255)
@@ -97,7 +97,7 @@ Similar to the short branch, but the first byte of 255 indicates a 16-bit offset
 1. INTX - offset to right node
 
 The left node begins at this node + 3.
-The right node begins at this node + 3 + offset.
+The right node begins at this node + offset.
 
 
 

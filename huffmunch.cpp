@@ -615,15 +615,15 @@ void huffmunch_tree_build_node(const HuffTree& tree, const HuffNode* node, const
 
 	// emit size to skip to right branch
 	uint p0 = output.size();
-	uint skip = ta + 1; // +1 because minimum skip length is 2, but need to make room for 1 more string length
+	uint skip = ta + 1; // minimum leaf or subtree size is 2, +1 for this node's byte
 	assert(skip >= 3); // ta should never be less than 2 (single byte string leaf)
 	if (skip < 255)
 	{
-		output.push_back(skip); // single byte skip+1
+		output.push_back(skip);
 	}
 	else
 	{
-		skip -= 1; // double byte skip
+		skip += 2; // add two more bytes for the longer offset in this node
 		if (skip >= (1<<16)) throw exception("Huffman tree branch unexpectedly large!");
 		output.push_back(255);
 		output.push_back(skip & 255);
@@ -711,7 +711,7 @@ bool huffmunch_decode(const vector<u8>& packed, Stri& unpacked)
 			uint skip = packed[pos]; ++pos;
 			if (skip == 255)
 			{
-				skip = (packed[pos+0] + (packed[pos+1]<<8)) + 1; pos += 2;
+				skip = (packed[pos+0] + (packed[pos+1]<<8)) - 2; pos += 2;
 			}
 
 			while (skip > 2)
@@ -734,7 +734,7 @@ bool huffmunch_decode(const vector<u8>& packed, Stri& unpacked)
 				skip = packed[pos]; ++pos;
 				if (skip == 255)
 				{
-					skip = (packed[pos+0] + (packed[pos+1]<<8)) + 1; pos += 2;
+					skip = (packed[pos+0] + (packed[pos+1]<<8)) - 2; pos += 2;
 				}
 			};
 			DEBUG_OUT(DBV,"\n");

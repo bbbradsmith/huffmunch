@@ -5,3 +5,4 @@ Release/
 test/
 cmd.exe.lnk
 danger/output/
+danger/cc65/
