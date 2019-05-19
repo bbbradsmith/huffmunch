@@ -15,19 +15,22 @@ hm_status = <(huffmunch_zpblock + 7) ; bits 0-2 = bits left in hm_byte, bit 7 = 
 hm_length = <(huffmunch_zpblock + 8) ; bytes left in current string
 .assert (huffmunch_zpblock + 9) <= 256, error, "huffmunch_zpblock requires 9 bytes on zero page"
 
+; NOTE: only hm_node and hm_stream need to be on ZP
+;       the rest could go elsewhere, but still recommended for ZP
+
 .segment "CODE"
 
 .proc huffmunch_load
 	; hm_node = header
 	; Y:X = index
 	hm_temp = hm_byte ; temporary 16-bit value in hm_status:hm_byte
-	; hm_stream = (index * 2)
+	; 1. hm_stream = (index * 2)
 	sty hm_stream+1
 	txa
 	asl
 	sta hm_stream+0
 	rol hm_stream+1
-	; hm_temp = stream count * 2
+	; 2. hm_temp = stream count * 2
 	ldy #1
 	lda (hm_node), Y
 	sta hm_temp+1
@@ -36,7 +39,7 @@ hm_length = <(huffmunch_zpblock + 8) ; bytes left in current string
 	asl
 	sta hm_temp+0
 	rol hm_temp+1
-	; hm_node = header + 2
+	; 3. hm_node = header + 2
 	lda hm_node+0
 	clc
 	adc #2
@@ -44,7 +47,7 @@ hm_length = <(huffmunch_zpblock + 8) ; bytes left in current string
 	bcc :+
 		inc hm_node+1
 	:
-	; hm_tree = header + 2 + (4 * stream count) [ready]
+	; 4. hm_tree = header + 2 + (4 * stream count) [ready]
 	lda hm_node+0
 	clc
 	adc hm_temp+0
@@ -59,7 +62,7 @@ hm_length = <(huffmunch_zpblock + 8) ; bytes left in current string
 	lda hm_tree+1
 	adc hm_temp+1
 	sta hm_tree+1
-	; hm_node = header + 2 + (index * 2)
+	; 5. hm_node = header + 2 + (index * 2)
 	lda hm_node+0
 	clc
 	adc hm_stream+0
@@ -67,14 +70,14 @@ hm_length = <(huffmunch_zpblock + 8) ; bytes left in current string
 	lda hm_node+1
 	adc hm_stream+1
 	sta hm_node+1
-	; hm_stream = stream address [ready]
+	; 6. hm_stream = stream address [ready]
 	; Y = 0
 	lda (hm_node), Y
 	sta hm_stream+0
 	iny
 	lda (hm_node), Y
 	sta hm_stream+1
-	; hm_node = header + 2 + (index * 2) + (2 * stream count)
+	; 7. hm_node = header + 2 + (index * 2) + (2 * stream count)
 	lda hm_node+0
 	clc
 	adc hm_temp+0
@@ -82,7 +85,7 @@ hm_length = <(huffmunch_zpblock + 8) ; bytes left in current string
 	lda hm_node+1
 	adc hm_temp+1
 	sta hm_node+1
-	; hm_node = stream length [ready]
+	; 8. hm_node = stream length [ready]
 	; Y = 1
 	lda (hm_node), Y
 	tax
@@ -90,7 +93,7 @@ hm_length = <(huffmunch_zpblock + 8) ; bytes left in current string
 	lda (hm_node), Y
 	sta hm_node+0
 	stx hm_node+1
-	; initialize other data
+	; 9. initialize other data
 	lda #0
 	sta hm_byte ; doesn't strictly need to be initialized
 	sta hm_status
