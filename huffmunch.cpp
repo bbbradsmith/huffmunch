@@ -478,9 +478,11 @@ elem best_suffix(elem e, uint overhead, const vector<Stri>& symbols, const vecto
 	return best;
 }
 
-#if !HUFFMUNCH_CANONICAL
+//
+// Standard tree
+//
 
-uint huffmunch_tree_bytes_node(const HuffTree& tree, const HuffNode* node, const vector<Stri>& symbols)
+uint huffmunch_tree_bytes_node_s(const HuffTree& tree, const HuffNode* node, const vector<Stri>& symbols)
 {
 	if (node->leaf != EMPTY)
 	{
@@ -506,8 +508,8 @@ uint huffmunch_tree_bytes_node(const HuffTree& tree, const HuffNode* node, const
 
 	assert(node->c0 != NULL);
 	assert(node->c1 != NULL);
-	uint ta = huffmunch_tree_bytes_node(tree, node->c0, symbols);
-	uint tb = huffmunch_tree_bytes_node(tree, node->c1, symbols);
+	uint ta = huffmunch_tree_bytes_node_s(tree, node->c0, symbols);
+	uint tb = huffmunch_tree_bytes_node_s(tree, node->c1, symbols);
 	uint tmin = min(ta,tb); // smaller node goes on left
 	uint skip = tmin + 1; // skip distance is left node + 1 byte to store the distance
 	assert (skip >= 3); // leaf must be at least 2 bytes
@@ -517,12 +519,12 @@ uint huffmunch_tree_bytes_node(const HuffTree& tree, const HuffNode* node, const
 	return 3 + ta + tb;
 }
 
-uint huffmunch_tree_bytes(const HuffTree& tree, const vector<Stri>& symbols)
+uint huffmunch_tree_bytes_s(const HuffTree& tree, const vector<Stri>& symbols)
 {
-	return huffmunch_tree_bytes_node(tree, tree.head, symbols);
+	return huffmunch_tree_bytes_node_s(tree, tree.head, symbols);
 }
 
-void huffmunch_tree_build_node(const HuffTree& tree, const HuffNode* node, const vector<Stri>& symbols,
+void huffmunch_tree_build_node_s(const HuffTree& tree, const HuffNode* node, const vector<Stri>& symbols,
 	uint depth, uint code, unordered_map<elem,HuffCode>& codes,
 	vector<Fixup>& fixup, unordered_map<elem,uint>& string_position,
 	vector<u8>& output)
@@ -597,8 +599,8 @@ void huffmunch_tree_build_node(const HuffTree& tree, const HuffNode* node, const
 	assert(node->c1 != NULL);
 
 	// determine size of 2 branches
-	uint ta = huffmunch_tree_bytes_node(tree, node->c0, symbols);
-	uint tb = huffmunch_tree_bytes_node(tree, node->c1, symbols);
+	uint ta = huffmunch_tree_bytes_node_s(tree, node->c0, symbols);
+	uint tb = huffmunch_tree_bytes_node_s(tree, node->c1, symbols);
 
 	// put lowest branch on left
 	const HuffNode* na = node->c0;
@@ -633,21 +635,21 @@ void huffmunch_tree_build_node(const HuffTree& tree, const HuffNode* node, const
 	uint pa = output.size(); // position of left branch
 	uint pb = pa + ta; // position of right branch
 
-	huffmunch_tree_build_node(tree, na, symbols, depth+1, (code<<1)|0, codes, fixup, string_position, output);
-	assert (output.size() == pb); // verify huffmunch_tree_bytes_node size precalculation
-	huffmunch_tree_build_node(tree, nb, symbols, depth+1, (code<<1)|1, codes, fixup, string_position, output);
-	assert (output.size() == pb+tb); // verify huffmunch_tree_bytes_node size precalculation
+	huffmunch_tree_build_node_s(tree, na, symbols, depth+1, (code<<1)|0, codes, fixup, string_position, output);
+	assert (output.size() == pb); // verify huffmunch_tree_bytes_node_s size precalculation
+	huffmunch_tree_build_node_s(tree, nb, symbols, depth+1, (code<<1)|1, codes, fixup, string_position, output);
+	assert (output.size() == pb+tb); // verify huffmunch_tree_bytes_node_s size precalculation
 
-	assert ((output.size() - p0) == huffmunch_tree_bytes_node(tree,node,symbols));
+	assert ((output.size() - p0) == huffmunch_tree_bytes_node_s(tree,node,symbols));
 }
 
-void huffmunch_tree_build(const HuffTree& tree, const vector<Stri>& symbols, unordered_map<elem,HuffCode>& codes, vector<u8>& output)
+void huffmunch_tree_build_s(const HuffTree& tree, const vector<Stri>& symbols, unordered_map<elem,HuffCode>& codes, vector<u8>& output)
 {
 	uint tree_pos = output.size();
 
 	vector<Fixup> fixup;
 	unordered_map<elem,uint> string_position;
-	huffmunch_tree_build_node(tree, tree.head, symbols, 0, 0, codes, fixup, string_position, output);
+	huffmunch_tree_build_node_s(tree, tree.head, symbols, 0, 0, codes, fixup, string_position, output);
 
 	for (Fixup f : fixup)
 	{
@@ -661,11 +663,11 @@ void huffmunch_tree_build(const HuffTree& tree, const vector<Stri>& symbols, uno
 		output[f.position+1] = link >> 8;
 	}
 
-	assert((output.size()-tree_pos) == huffmunch_tree_bytes(tree, symbols));
+	assert((output.size()-tree_pos) == huffmunch_tree_bytes_s(tree, symbols));
 }
 
 // unpacks packed into unpacked, false on error
-bool huffmunch_decode(const vector<u8>& packed, Stri& unpacked)
+bool huffmunch_decode_s(const vector<u8>& packed, Stri& unpacked)
 {
 	// header
 	vector<uint> split_start;
@@ -778,9 +780,11 @@ bool huffmunch_decode(const vector<u8>& packed, Stri& unpacked)
 	return true;
 }
 
-#else // else if HUFFMUNCH_CANONICAL
+//
+// Canonical tree
+//
 
-void huffmunch_tree_bytes_node(const HuffNode* node, uint depth, vector<uint>& leaf_count)
+void huffmunch_tree_bytes_node_c(const HuffNode* node, uint depth, vector<uint>& leaf_count)
 {
 	while (leaf_count.size() < (depth+1)) leaf_count.push_back(0);
 	if (node->leaf != EMPTY)
@@ -791,17 +795,17 @@ void huffmunch_tree_bytes_node(const HuffNode* node, uint depth, vector<uint>& l
 
 	assert(node->c0 != NULL);
 	assert(node->c1 != NULL);
-	huffmunch_tree_bytes_node(node->c0, depth+1, leaf_count);
-	huffmunch_tree_bytes_node(node->c1, depth+1, leaf_count);
+	huffmunch_tree_bytes_node_c(node->c0, depth+1, leaf_count);
+	huffmunch_tree_bytes_node_c(node->c1, depth+1, leaf_count);
 }
 
-uint huffmunch_tree_bytes(const HuffTree& tree, const vector<Stri>& symbols)
+uint huffmunch_tree_bytes_c(const HuffTree& tree, const vector<Stri>& symbols)
 {
 	uint bytes = 0;
 
 	// generate the leaf count list
 	vector<uint> leaf_count;
-	huffmunch_tree_bytes_node(tree.head, 0, leaf_count);
+	huffmunch_tree_bytes_node_c(tree.head, 0, leaf_count);
 	for (uint c : leaf_count)
 	{
 		bytes += 1;
@@ -839,7 +843,7 @@ uint huffmunch_tree_bytes(const HuffTree& tree, const vector<Stri>& symbols)
 	return bytes;
 }
 
-void huffmunch_tree_build_node(const HuffNode* node, uint depth, vector<vector<elem>>& leaves)
+void huffmunch_tree_build_node_c(const HuffNode* node, uint depth, vector<vector<elem>>& leaves)
 {
 	// add new level of leaves as encountered
 	while (leaves.size() < (depth+1))
@@ -856,16 +860,16 @@ void huffmunch_tree_build_node(const HuffNode* node, uint depth, vector<vector<e
 
 	assert(node->c0 != NULL);
 	assert(node->c1 != NULL);
-	huffmunch_tree_build_node(node->c0, depth+1, leaves);
-	huffmunch_tree_build_node(node->c1, depth+1, leaves);
+	huffmunch_tree_build_node_c(node->c0, depth+1, leaves);
+	huffmunch_tree_build_node_c(node->c1, depth+1, leaves);
 }
 
-void huffmunch_tree_build(const HuffTree& tree, const vector<Stri>& symbols, unordered_map<elem,HuffCode>& codes, vector<u8>& output)
+void huffmunch_tree_build_c(const HuffTree& tree, const vector<Stri>& symbols, unordered_map<elem,HuffCode>& codes, vector<u8>& output)
 {
 	uint tree_pos = output.size();
 
 	vector<vector<elem>> leaves;
-	huffmunch_tree_build_node(tree.head, 0, leaves);
+	huffmunch_tree_build_node_c(tree.head, 0, leaves);
 
 	// write count table
 	if (leaves.size() >= 255) throw exception("Huffman tree unexpectedly deep!");
@@ -950,11 +954,11 @@ void huffmunch_tree_build(const HuffTree& tree, const vector<Stri>& symbols, uno
 		output[f.position+1] = link >> 8;
 	}
 
-	assert((output.size()-tree_pos) == huffmunch_tree_bytes(tree, symbols));
+	assert((output.size()-tree_pos) == huffmunch_tree_bytes_c(tree, symbols));
 }
 
 // unpacks packed into unpacked, false on error
-bool huffmunch_decode(const vector<u8>& packed, Stri& unpacked)
+bool huffmunch_decode_c(const vector<u8>& packed, Stri& unpacked)
 {
 	// header
 	vector<uint> split_start;
@@ -1098,14 +1102,12 @@ bool huffmunch_decode(const vector<u8>& packed, Stri& unpacked)
 	return true;
 }
 
-#endif // end (!HUFFMUNCH_CANONICAL else HUFFMUNCH_CANONICAL)
-
 //
 // the "muncher" that gradually compresses the data by building up its dictionary
 //
 
 // compute the size of the data with a given dictionary
-MunchSize huffmunch_size(const MunchInput& in)
+MunchSize huffmunch_size(const MunchInput& in, bool canonical)
 {
 	MunchSize size = {0,0};
 	if (in.data.size() < 1) return size;
@@ -1113,11 +1115,13 @@ MunchSize huffmunch_size(const MunchInput& in)
 	HuffTree tree;
 	huffman_tree(in,tree);
 	size.stream_bits = huffman_tree_bits(tree);
-	size.table_bytes = huffmunch_tree_bytes(tree, in.symbols);
+	size.table_bytes = !canonical ?
+		huffmunch_tree_bytes_s(tree, in.symbols) :
+		huffmunch_tree_bytes_c(tree, in.symbols);
 	return size;
 }
 
-MunchInput huffmunch_munch(const Stri& data)
+MunchInput huffmunch_munch(const Stri& data, bool canonical)
 {
 	const uint data_total = data.size() * 8;
 
@@ -1137,7 +1141,7 @@ MunchInput huffmunch_munch(const Stri& data)
 		s.push_back(i);
 		best.symbols.push_back(s);
 	}
-	MunchSize best_size = huffmunch_size(best);
+	MunchSize best_size = huffmunch_size(best, canonical);
 
 	// buffers for storing Rabin-Karp style hashes of various widths for repeated string detection
 	vector<elem> rk[STEP_SIZE-1];
@@ -1314,7 +1318,7 @@ MunchInput huffmunch_munch(const Stri& data)
 				last_symbol_len = ss;
 
 				// test the actual finished size of the new data and tree
-				MunchSize next_size = huffmunch_size(next);
+				MunchSize next_size = huffmunch_size(next, canonical);
 				if (next_size < best_size)
 				{
 					minima = false;
@@ -1387,7 +1391,8 @@ int huffmunch_compress(
 	unsigned char* output,
 	unsigned int& output_size,
 	const unsigned int *splits,
-	unsigned int split_count)
+	unsigned int split_count,
+	bool canonical)
 {
 	if (splits == NULL)
 	{
@@ -1415,7 +1420,7 @@ int huffmunch_compress(
 		print_stri_setup(sdata);
 		#endif
 
-		MunchInput best = huffmunch_munch(sdata);
+		MunchInput best = huffmunch_munch(sdata, canonical);
 
 		HuffTree tree;
 		unordered_map<elem,HuffCode> codes;
@@ -1430,7 +1435,9 @@ int huffmunch_compress(
 		for (uint i=0; i<prefix_size; ++i) packed.push_back(44); // reserve space for header
 
 		huffman_tree(best, tree);
-		huffmunch_tree_build(tree, best.symbols, codes, packed);
+		!canonical ?
+			huffmunch_tree_build_s(tree, best.symbols, codes, packed) :
+			huffmunch_tree_build_c(tree, best.symbols, codes, packed);
 		huffman_encode(codes, best.data, packed, packed_splits);
 
 		DEBUG_OUT(DBH,"split_count: %d\n",split_count);
@@ -1450,7 +1457,9 @@ int huffmunch_compress(
 
 		#if HUFFMUNCH_DEBUG
 		Stri verify;
-		if (huffmunch_decode(packed, verify))
+		if (!canonical ?
+				huffmunch_decode_s(packed, verify) : 
+				huffmunch_decode_c(packed, verify))
 		{
 			if (verify != sdata)
 			{
@@ -1490,7 +1499,8 @@ int huffmunch_decompress(
 	const unsigned char* data,
 	unsigned int data_size,
 	unsigned char* output,
-	unsigned int& output_size)
+	unsigned int& output_size,
+	bool canonical)
 {
 	try
 	{
@@ -1499,7 +1509,9 @@ int huffmunch_decompress(
 		assert(packed.size() == data_size);
 
 		Stri unpacked;
-		huffmunch_decode(packed, unpacked);
+		!canonical ?
+			huffmunch_decode_s(packed, unpacked) :
+			huffmunch_decode_c(packed, unpacked);
 
 		unsigned int pos = 0;
 		for (unsigned int i=0; i < unpacked.size(); ++i)

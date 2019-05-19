@@ -4,10 +4,6 @@
 // Brad Smith, 2019
 // https://github.com/bbbradsmith/huffmunch
 
-// CANONICAL format produces a slightly smaller dictionary tree structure
-// but takes much, much longer to decode (not recommended)
-#define HUFFMUNCH_CANONICAL 0
-
 // Headers and bank tables will use this size for integers.
 // 2 bytes = 64 KB maximum output size
 // 3 bytes = 16 MB maximum output size
@@ -51,7 +47,8 @@ extern int huffmunch_compress(
 	unsigned char* output,
 	unsigned int& output_size,
 	const unsigned int *splits,
-	unsigned int split_count);
+	unsigned int split_count,
+	bool canonical = false);
 
 // huffmunch_decompress
 //   data
@@ -66,7 +63,8 @@ extern int huffmunch_decompress(
 	const unsigned char* data,
 	unsigned int data_size,
 	unsigned char* output,
-	unsigned int& output_size);
+	unsigned int& output_size,
+	bool canonical = false);
 
 // huffmunch_debug diagnostic bitfield
 const unsigned int HUFFMUNCH_DEBUG_OFF       = 0x00000000UL;

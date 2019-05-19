@@ -15,6 +15,7 @@ const int VERSION_MINOR = 0;
 #include "huffmunch.h"
 
 bool verbose = false;
+bool canonical = false;
 
 int huffmunch_file(const char* file_in, const char* file_out)
 {
@@ -47,7 +48,7 @@ int huffmunch_file(const char* file_in, const char* file_out)
 	fclose(f);
 	printf("%6d bytes read from %s\n", size_in, file_in);
 
-	int result = huffmunch_compress(buffer_in, size_in, buffer_out, size_out, NULL, 0);
+	int result = huffmunch_compress(buffer_in, size_in, buffer_out, size_out, NULL, 0, canonical);
 	if (result != HUFFMUNCH_OK)
 	{
 		printf("error: compression error %d: %s\n", result, huffmunch_error_description(result));
@@ -247,7 +248,8 @@ int huffmunch_list(const char* list_file, const char* out_file)
 		int result = huffmunch_compress(
 			data.data()+data_start,data_end-data_start,
 			bank.data(),result_size,
-			temp_splits.data(),temp_splits.size());
+			temp_splits.data(),temp_splits.size(),
+			canonical);
 
 		if (result == HUFFMUNCH_OUTPUT_OVERFLOW) // start a new bank if it doesn't fit
 		{
@@ -270,7 +272,8 @@ int huffmunch_list(const char* list_file, const char* out_file)
 			result = huffmunch_compress(
 				data.data()+data_start,data_end-data_start,
 				bank.data(),result_size,
-				NULL,1);
+				NULL,1,
+				canonical);
 		}
 
 		if (result != HUFFMUNCH_OK)
@@ -350,8 +353,14 @@ int print_usage()
 		"        Compress a set of files together from a list file.\n"
 		"\n"
 		"optional arguments:\n"
+		"    -C\n"
+		"        Canonical tree format, slightly smaller, much slower to decompress.\n"
 		"    -V\n"
-		"        verbose output.\n"
+		"        Verbose output.\n"
+		#if HUFFMUNCH_DEBUG
+		"    -D\n"
+		"        Debug output.\n"
+		#endif
 		"\n");
 	printf(
 		"List files are a simple text format:\n"
@@ -372,10 +381,8 @@ int print_usage()
 		"        out0000.hfm - the first bank\n"
 		"        out0001.hfm - the second bank\n"
 		"\n", HUFFMUNCH_HEADER_INTEGER_SIZE);
-	printf("huffmunch version %d.%d (%s%s)\n",
-		VERSION_MAJOR, VERSION_MINOR,
-		HUFFMUNCH_CANONICAL ? "canonical" : "standard",
-		HUFFMUNCH_DEBUG ? " debug" : "");
+	printf("huffmunch version %d.%d\n",
+		VERSION_MAJOR, VERSION_MINOR);
 	return -1;
 }
 
@@ -401,11 +408,9 @@ int main(int argc, const char** argv)
 				break;
 			}
 
-			if (arg[1] == 'v' || arg[1] == 'V')
-			{
-				verbose = true;
-				continue;
-			}
+			if      (arg[1] == 'c' || arg[1] == 'C') { canonical = true; continue; }
+			else if (arg[1] == 'v' || arg[1] == 'V') { verbose   = true; continue; }
+			else if (arg[1] == 'd' || arg[1] == 'D') { huffmunch_debug(HUFFMUNCH_DEBUG_FULL); continue; }
 
 			if (mode != -1) // mode already set
 			{
