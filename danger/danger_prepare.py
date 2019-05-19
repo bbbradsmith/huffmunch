@@ -22,7 +22,7 @@ title = ([""]*TT) + [
     ([""]*TB)
 
 paragraphs = []
-for line in title + open("danger.txt","rt").readlines()[3:-1]:
+for line in open("danger.txt","rt").readlines()[3:-1]:
     l = line.rstrip();
     if l == "":
         paragraphs.append([])
@@ -40,6 +40,9 @@ def add_line(s):
     if (page_line >= H):
         pages.append("")
         page_line = 0
+
+for l in title:
+    add_line(l)
 
 for p in paragraphs:
     s = "   "

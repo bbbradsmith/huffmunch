@@ -5,7 +5,7 @@
 .importzp huffmunch_zpblock
 
 ; in: Y:X = stream index, hm_node = pointer to data block
-; out: Y:X = total stream count in data, hm_node = output byte length of current stream
+; out: Y:X = output byte length of current stream, hm_node = total stream count in data
 .export huffmunch_load
 
 ; out: reads 1 byte from stream, result in A (X,Y,flags clobbered)
@@ -41,12 +41,15 @@ hm_length = <(huffmunch_zpblock + 8) ; bytes left in current string
 	sta hm_temp+1
 	dey
 	lda (hm_node), Y
-	pha
+	pha ; stack = stream count 0,1
 	asl
 	sta hm_temp+0
 	rol hm_temp+1
 	; 3. hm_node = header + 2
+	lda hm_node+1
+	pha
 	lda hm_node+0
+	pha ; stack = header 0, 1, stream count 0, 1
 	clc
 	adc #2
 	sta hm_node+0
@@ -76,12 +79,15 @@ hm_length = <(huffmunch_zpblock + 8) ; bytes left in current string
 	lda hm_node+1
 	adc hm_stream+1
 	sta hm_node+1
-	; 6. hm_stream = stream address [ready]
+	; 6. hm_stream = header + stream address [ready]
 	; Y = 0
-	lda (hm_node), Y
+	pla
+	clc
+	adc (hm_node), Y
 	sta hm_stream+0
 	iny
-	lda (hm_node), Y
+	pla ; stack = stream count 0, 1
+	adc (hm_node), Y
 	sta hm_stream+1
 	; 7. hm_node = header + 2 + (index * 2) + (2 * stream count)
 	lda hm_node+0
@@ -91,21 +97,23 @@ hm_length = <(huffmunch_zpblock + 8) ; bytes left in current string
 	lda hm_node+1
 	adc hm_temp+1
 	sta hm_node+1
-	; 8. hm_node = stream length [ready]
+	; 8. Y:X = stream length [ready]
 	; Y = 1
 	lda (hm_node), Y
-	tax
+	pha ; stack = stream length 1, stream count 0, 1
 	dey
 	lda (hm_node), Y
-	sta hm_node+0
-	stx hm_node+1
-	; 9. initialize other data
-	pla
+	tax
+	pla ; stack = stream count 0, 1
 	tay
+	; 9. hm_node = total stream count [ready]
 	pla
-	tax ; Y:X = entry count
+	sta hm_node+0
+	pla
+	sta hm_node+1
+	; 10. initialize other data [ready]
 	lda #0
-	sta hm_byte ; doesn't strictly need to be initialized
+	sta hm_byte ; hm_byte doesn't need initialization, just for consistency
 	sta hm_status
 	sta hm_length
 	rts
@@ -215,7 +223,7 @@ node3:
 		inc hm_stream+1
 	:
 	dec hm_status
-	lsr hm_byte
+	asl hm_byte ; big-endian bit order
 	bcs walk_right
 walk_left:
 	cpx #255
