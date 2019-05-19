@@ -4,23 +4,25 @@ OUTDIR = "output\\"
 BANKCOUNT = 1
 BANKSIZE = 32768
 W = 28
-H = 26
+H = 25
 
 def centre(s):
     global W
     w = len(s)
     return (" " * ((W-len(s))//2)) + s
 
-output = ([""]*10) + [
+TT = (H-5)//2
+TB = H-(TT+5)
+title = ([""]*TT) + [
     centre("The Most Dangerous Game"),
     "",
     centre("by Richard Connell"),
     "",
     centre("(1893-1949)")] + \
-    ([""]*(H-10))
+    ([""]*TB)
 
 paragraphs = []
-for line in open("danger.txt","rt").readlines()[3:-1]:
+for line in title + open("danger.txt","rt").readlines()[3:-1]:
     l = line.rstrip();
     if l == "":
         paragraphs.append([])

@@ -4,8 +4,12 @@
 
 .importzp huffmunch_zpblock
 
-.export huffmunch_load ; in: Y:X = index, hm_node = pointer to data block
-.export huffmunch_read ; reads 1 byte from stream, result in A (flags unreliable)
+; in: Y:X = stream index, hm_node = pointer to data block
+; out: Y:X = total stream count in data, hm_node = output byte length of current stream
+.export huffmunch_load
+
+; out: reads 1 byte from stream, result in A (X,Y,flags clobbered)
+.export huffmunch_read
 
 hm_node   = <(huffmunch_zpblock + 0); pointer to current node of tree
 hm_stream = <(huffmunch_zpblock + 2) ; pointer to bitstream
@@ -33,9 +37,11 @@ hm_length = <(huffmunch_zpblock + 8) ; bytes left in current string
 	; 2. hm_temp = stream count * 2
 	ldy #1
 	lda (hm_node), Y
+	pha
 	sta hm_temp+1
 	dey
 	lda (hm_node), Y
+	pha
 	asl
 	sta hm_temp+0
 	rol hm_temp+1
@@ -94,6 +100,10 @@ hm_length = <(huffmunch_zpblock + 8) ; bytes left in current string
 	sta hm_node+0
 	stx hm_node+1
 	; 9. initialize other data
+	pla
+	tay
+	pla
+	tax ; Y:X = entry count
 	lda #0
 	sta hm_byte ; doesn't strictly need to be initialized
 	sta hm_status

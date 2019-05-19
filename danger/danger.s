@@ -1,4 +1,11 @@
 .segment "ZEROPAGE"
+nmi_update: .res 1
+nmi_addr: .res 2
+scroll_x: .res 1
+scroll_y: .res 1
+ppu_2000: .res 1
+ppu_2001: .res 1
+palette: .res 32
 
 .exportzp huffmunch_zpblock
 huffmunch_zpblock: .res 9
@@ -19,27 +26,205 @@ oam: .res 256
 	sta $2006
 .endmacro
 
-main:
+.macro DRAW_ONE value_
+	lda #value_
+	sta $2007
+.endmacro
+
+.macro DRAW_REP value_, count_
+	lda #value_
+	ldx #count_
+	jsr draw_rep
+.endmacro
+
+.proc draw_rep
+	:
+		sta $2007
+		dex
+		bne :-
+	rts
+.endproc
+
+.proc draw_page
+	DRAW_REP $00, 33
+	DRAW_ONE $08
+	DRAW_REP $04, 28
+	DRAW_ONE $09
+	ldy #0
+	:
+		DRAW_REP $00, 2
+		DRAW_ONE $06
+		DRAW_REP $20, 28
+		DRAW_ONE $07
+		iny
+		cpy #26
+		bcc :-
+	DRAW_REP $00, 2
+	DRAW_ONE $0A
+	DRAW_REP $05, 28
+	DRAW_ONE $0B
+	DRAW_REP $00, (33+64)
+	rts
+.endproc
+
+.proc draw_knife
+	; TODO
+	rts
+.endproc
+
+.proc main
+	; draw page frames
+	PPU_LATCH $2000
+	jsr draw_page
+	jsr draw_page
+	jsr draw_page
+	jsr draw_page
 	; load palettes
-	PPU_LATCH $3F00
 	ldx #0
 	:
-		lda palettes, X
+		lda palette_data, X
+		sta palette, X
+		inx
+		cpx #32
+		bcc :-
+	; setup sprites
+	ldx #0
+	:
+		lda #$FF
+		sta oam, X
+		inx
+		bne :-
+	ldx #255
+	ldy #240
+	jsr draw_knife
+	; TODO setup title page etc.
+	; begin rendering
+	lda #%00011110
+	sta ppu_2001
+	lda #%10001000
+	sta ppu_2000
+	sta $2000 ; commence NMI
+	jsr render_on
+loop:
+	; TODO
+	jmp loop
+.endproc
+
+;
+; read controller
+;
+
+; TODO
+
+;
+; drawing and NMI
+;
+
+.enum
+	NMI_NONE=0
+	NMI_ON
+	NMI_ROW
+	NMI_ROW2
+.endenum
+
+.proc render_on
+	lda #NMI_ON
+	jmp render_wait
+.endproc
+
+.proc render_row
+	lda #NMI_ROW
+	jmp render_wait
+.endproc
+
+.proc render_row2
+	lda #NMI_ROW2
+	jmp render_wait
+.endproc
+
+.proc render_wait
+	sta nmi_update
+	:
+		lda nmi_update
+		bne :-
+	rts
+.endproc
+
+.proc nmi
+	pha
+	txa
+	pha
+	tya
+	pha
+	lda nmi_update
+	beq skip
+	; OAM DMA
+	lda #0
+	sta $2003
+	lda #>oam
+	sta $4014
+	; palettes
+	bit $2002
+	ldx #0
+	stx $2000 ; horizontal increment
+	lda #$3F
+	sta $2006
+	stx $2006
+	:
+		lda palette, X
 		sta $2007
 		inx
 		cpx #32
 		bcc :-
-	; more to do
-loop:
-	jmp loop
-
-nmi:
+	lda nmi_update
+	cmp #NMI_ROW
+	bcc finish
+		lda nmi_addr+1
+		sta $2006
+		lda nmi_addr+0
+		sta $2006
+		; TODO ROW
+	lda nmi_update
+	cmp #NMI_ROW2
+	bcc finish
+		lda nmi_addr+0
+		clc
+		adc #32
+		tax
+		lda nmi_addr+1
+		adc #0
+		sta $2006
+		stx $2006
+		; TODO ROW2
+finish:
+	lda ppu_2000
+	sta $2000
+	lda ppu_2001
+	sta $2001
+	lda scroll_x
+	sta $2005
+	lda scroll_y
+	sta $2005
+	lda #0
+	sta nmi_update
+skip:
+	pla
+	tay
+	pla
+	tax
+	pla
 	rti
+.endproc
 
-irq:
+;
+; IRQ and reset
+;
+
+.proc irq
 	rti
+.endproc
 
-reset:
+.proc reset
 	sei       ; disable maskable interrupts
 	lda #0
 	sta $2000 ; disable non-maskable interrupt
@@ -77,6 +262,11 @@ reset:
 		bpl :-
 	; ready
 	jmp main
+.endproc
+
+;
+; vectors
+;
 
 .segment "VECTORS"
 .word nmi
@@ -84,12 +274,12 @@ reset:
 .word irq
 
 ;
-;
+; data
 ;
 
 .segment "DATA"
 
-palettes:
+palette_data:
 	.byte $0F, $16, $06, $30
 	.byte $0F, $16, $06, $30
 	.byte $0F, $16, $06, $30
