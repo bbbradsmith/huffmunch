@@ -134,7 +134,13 @@ Bitstream
 =========
 
 Each stored bitstream begins on a byte boundary, specified in the header section.
-Bits of the stream are stored in each byte starting with the least significant bit first.
+Bits of the stream are stored in each byte starting with the most significant bit first.
+
+The first bit of the stream comes from bit 7 of the first byte.
+The second bit comes from bit 6...
+The eighth bit comes from bit 0...
+The ninth bit comes from bit 7 of the second byte...
+Etc.
 
 For each bit read, take the corresponding left or right branch of the tree until a
 leaf is found, then emit the string designated by that leaf, before returning to the

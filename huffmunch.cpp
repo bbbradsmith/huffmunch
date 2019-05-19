@@ -32,6 +32,15 @@ const unsigned int STEP_SIZE = 3;
 // how many attempts can be made in a single pass before minima is assumed (0 for no limit)
 const unsigned int CUTOFF = 100;
 
+// used big-endian bytes in the bytestream (easier to read in hex debugging tools)
+// but this is configurable:
+
+// big-endian, high bit first in byte of stream
+#define BITSTREAM_ENDIAN 7-
+// little-endian, low bit first in byte of stream
+//#define BITSTREAM_ENDIAN 0+
+
+
 //
 // type definitions
 //
@@ -78,7 +87,7 @@ public:
 	uint read()
 	{
 		if (end()) return 0;
-		uint b = ((*v)[pos] >> bit) & 1;
+		uint b = ((*v)[pos] >> (BITSTREAM_ENDIAN bit)) & 1;
 		++bit;
 		if (bit >= 8) { bit=0; ++pos; }
 		return b;
@@ -121,7 +130,7 @@ public:
 	void write(uint b)
 	{
 		assert(b == (b&1));
-		buffer |= (b << bit);
+		buffer |= (b << (BITSTREAM_ENDIAN bit));
 		++bit;
 		if (bit >= 8) flush();
 	}
@@ -261,7 +270,7 @@ void print_stri(const Stri& v)
 		if (!print_stri_text)
 		{
 			if (i != 0) printf(",");
-			printf("%d",u8(c));
+			printf("%02X",u8(c));
 		}
 		else
 		{
@@ -532,7 +541,13 @@ void huffmunch_tree_build_node_s(const HuffTree& tree, const HuffNode* node, con
 	#if HUFFMUNCH_DEBUG
 	if (debug_bits & DBT)
 	{
-		for(uint i=0;i<depth;++i) printf("+---"); printf("code %d/%d at %d\n",code,depth,output.size());
+		for(uint i=0;i<depth;++i) printf("+---"); printf("code %d/%d at %04X",code,depth,output.size());
+		if (node->leaf != EMPTY) 
+		{
+			printf(" ");
+			print_stri(symbols[node->leaf]);
+		}
+		printf("\n");
 	}
 	#endif
 
@@ -682,25 +697,26 @@ bool huffmunch_decode_s(const vector<u8>& packed, Stri& unpacked)
 
 	BitReader bitstream(&packed);
 
-	#if HUFFMUNCH_DEBUG
-	if (debug_bits & DBV)
-	{
-		printf("bitstream split 0 position: %d\n",split_start[0]);
-		bitstream.seek(split_start[0]);
-		while (!bitstream.end())
-		{
-			printf("%d",bitstream.read());
-		}
-		printf("\n");
-	}
-	#endif
-
 	for (uint s=0; s<split_count; ++s)
 	{
 		uint length = split_size[s];
 		bitstream.seek(split_start[s]);
 		unpacked.push_back(EMPTY);
-		DEBUG_OUT(DBV,"split %d: %X (%d bytes)\n",s,split_start[s],length);
+		DEBUG_OUT(DBV,"split %d: %04X (%d bytes)\n",s,split_start[s],length);
+		#if HUFFMUNCH_DEBUG
+		if (debug_bits & DBV)
+		{
+			uint i=0;
+			while (i<(length*8))
+			{
+				printf("%d",bitstream.read());
+				if ((i&7)==7) printf(" ");
+				++i;
+			}
+			printf("\n");
+			bitstream.seek(split_start[s]);
+		}
+		#endif
 
 		while (length)
 		{
@@ -753,7 +769,7 @@ bool huffmunch_decode_s(const vector<u8>& packed, Stri& unpacked)
 				while (slen > 0)
 				{
 					elem c = packed[pos]; ++pos;
-					DEBUG_OUT(DBV,"%d,",c);
+					DEBUG_OUT(DBV,"%02X,",c);
 					unpacked.push_back(c);
 					--length;
 					--slen;
@@ -763,7 +779,7 @@ bool huffmunch_decode_s(const vector<u8>& packed, Stri& unpacked)
 				{
 					uint suffix_pos = packed[pos+0] + (packed[pos+1] << 8) + table_pos;
 					pos = suffix_pos;
-					DEBUG_OUT(DBV,"(%d),",pos);
+					DEBUG_OUT(DBV,"(%04X),",pos);
 					skip = packed[pos]; ++pos;
 					if (skip > 2)
 					{
@@ -994,25 +1010,26 @@ bool huffmunch_decode_c(const vector<u8>& packed, Stri& unpacked)
 
 	BitReader bitstream(&packed);
 
-	#if HUFFMUNCH_DEBUG
-	if (debug_bits & DBV)
-	{
-		printf("bitstream split 0 position: %d\n",split_start[0]);
-		bitstream.seek(split_start[0]);
-		while (!bitstream.end())
-		{
-			printf("%d",bitstream.read());
-		}
-		printf("\n");
-	}
-	#endif
-
 	for (uint s=0; s<split_count; ++s)
 	{
 		uint length = split_size[s];
 		bitstream.seek(split_start[s]);
 		unpacked.push_back(EMPTY);
-		DEBUG_OUT(DBV,"split %d: %X (%d bytes)\n",s,split_start[s],length);
+		DEBUG_OUT(DBV,"split %d: %04X (%d bytes)\n",s,split_start[s],length);
+		#if HUFFMUNCH_DEBUG
+		if (debug_bits & DBV)
+		{
+			uint i=0;
+			while (i<(length*8))
+			{
+				printf("%d",bitstream.read());
+				if ((i&7)==7) printf(" ");
+				++i;
+			}
+			printf("\n");
+			bitstream.seek(split_start[s]);
+		}
+		#endif
 
 		while (length)
 		{
@@ -1026,8 +1043,6 @@ bool huffmunch_decode_c(const vector<u8>& packed, Stri& unpacked)
 			{
 				uint ds = leaf_count[d]; // symbols on current layer
 				uint dc = b - fc; // relative code at current depth
-
-				//if (verbose_debug) printf("decode: %d/%d (%d,%d,%d,%d)\n",b,d,ds,dc,fs,fc);
 
 				if (dc < ds)
 				{
@@ -1071,7 +1086,7 @@ bool huffmunch_decode_c(const vector<u8>& packed, Stri& unpacked)
 					for (uint i=0; i<slen; ++i)
 					{
 						elem c = packed[pos]; ++pos;
-						DEBUG_OUT(DBV,"%d,",c);
+						DEBUG_OUT(DBV,"%02X,",c);
 						unpacked.push_back(c);
 						--length;
 					}
@@ -1084,7 +1099,7 @@ bool huffmunch_decode_c(const vector<u8>& packed, Stri& unpacked)
 					for (uint i=0; i<slen; ++i)
 					{
 						elem c = packed[pos]; ++pos;
-						DEBUG_OUT(DBV,"%d,",c);
+						DEBUG_OUT(DBV,"%02X,",c);
 						unpacked.push_back(c);
 						--length;
 					}
