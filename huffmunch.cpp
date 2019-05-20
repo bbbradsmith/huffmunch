@@ -1351,7 +1351,7 @@ MunchInput huffmunch_munch(const Stri& data, bool canonical)
 				}
 				catch (exception e)
 				{
-					DEBUG_OUT(DBM,"skipped attempt: %s\n",e.what());
+					DEBUG_OUT(DBM,"skipped attempt %d: %s\n", last_attempt, e.what());
 				}
 			}
 
