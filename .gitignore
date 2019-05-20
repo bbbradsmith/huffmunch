@@ -7,3 +7,4 @@ cmd.exe.lnk
 danger/output/
 danger/cc65/
 danger/danger_build_notepad.bat
+danger/danger.nes.lnk

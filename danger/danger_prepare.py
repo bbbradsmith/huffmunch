@@ -11,15 +11,34 @@ def centre(s):
     w = len(s)
     return (" " * ((W-len(s))//2)) + s
 
-TT = (H-5)//2
-TB = H-(TT+5)
-title = ([""]*TT) + [
+title_text = [
+    "",
+    "",
+    "",
+    "",
+    "",
+    "",
+    "",
+    "",
+    "",
+    "",
     centre("The Most Dangerous Game"),
     "",
     centre("by Richard Connell"),
     "",
-    centre("(1893-1949)")] + \
-    ([""]*TB)
+    centre("1924"),
+    "",
+    "",
+    "",
+    "",
+    "",
+    "",
+    centre("NES Edition"),
+    centre("Brad Smith"),
+    centre("2019")]
+TT = (H-len(title_text))//2
+TB = H-(TT+len(title_text))
+title = ([""]*TT) + title_text + ([""]*TB)
 
 paragraphs = []
 for line in open("danger.txt","rt").readlines()[3:-1]:
@@ -66,6 +85,8 @@ for p in pages:
     for c in p:
         if c == "\n":
             c = 0
+        elif c == "ê":
+            c = 0x10
         else:
             c = ord(c)
         b.append(c)
