@@ -196,7 +196,9 @@ int huffmunch_list(const char* list_file, const char* out_file)
 		for (int i=start; i<end; ++i) data.push_back(fgetc(fb));
 		fclose(fb);
 
-		if(verbose) printf("%4d: %5d bytes read from %s (%d,%d)\n", i, end-start, path, start, end);
+		unsigned int entry_size = end - start;
+		if (end < start) entry_size = 0;
+		if(verbose) printf("%4d: %5d bytes read from %s (%d,%d)\n", i, entry_size, path, e.start, e.end);
 	}
 	printf("%d bytes read from %d source entries\n", data.size(), entries.size());
 	assert(entries.size() == splits.size());
@@ -357,19 +359,23 @@ int print_usage()
 		"        Canonical tree format, slightly smaller, much slower to decompress.\n"
 		"    -V\n"
 		"        Verbose output.\n"
+		"    -S (width)\n"
+		"        Wider search is slower, but marginally increases compression, default 3 (range: 2-16).\n"
+		"    -X (cutoff)\n"
+		"        Number of missed attempts before halting compression, default 100, 0 unlimited.\n"
 		#if HUFFMUNCH_DEBUG
-		"    -D\n"
-		"        Debug output.\n"
+		"    -D[T/B]\n"
+		"        Debug output. (-DT text, -DB binary, -D auto)\n"
 		#endif
 		"\n");
 	printf(
 		"List files are a simple text format:\n"
-		"    Line 1: [banks] [bank size]\n"
+		"    Line 1: (banks) (size)\n"
 		"        banks (int) - maximum number of banks to split output into\n"
 		"                      use 0 for unlimited banks\n"
 		"                      use 1 if multiple banks are not needed (faster)\n"
-		"        bank size (int) - how many bytes allowed in each bank\n"
-		"    Lines 2+: [start] [end] [file]\n"
+		"        size (int) - how many bytes allowed in each bank\n"
+		"    Lines 2+: (start) (end) (file)\n"
 		"        start (int) - first byte to read from file\n"
 		"        end (int) - last byte to read from file + 1\n"
 		"                    use -1 to read the whole file\n"
@@ -402,35 +408,69 @@ int main(int argc, const char** argv)
 		const char* arg = argv[i];
 		if (arg[0] == '-')
 		{
-			if (strlen(arg) > 2)
+			switch (arg[1])
 			{
+			case 'c':
+			case 'C':
+				if (strlen(arg) > 2) valid_args = false;
+				canonical = true;
+				break;
+			case 'v':
+			case 'V':
+				if (strlen(arg) > 2) valid_args = false;
+				verbose   = true;
+				break;
+			case 'd':
+			case 'D':
+				huffmunch_debug(HUFFMUNCH_DEBUG_FULL);
+				switch (arg[2])
+				{
+				case 't':
+				case 'T':
+					huffmunch_debug(HUFFMUNCH_DEBUG_FULL,1);
+					break;
+				case 'b':
+				case 'B':
+					huffmunch_debug(HUFFMUNCH_DEBUG_FULL,0);
+					break;
+				case 0:
+					break;
+				default:
+					valid_args = false;
+					break;
+				}
+				break;
+			case 'b':
+			case 'B':
+				if (strlen(arg) > 2) valid_args = false;
+				if ((i+1) >= argc) { valid_args = false; break; }
+				mode = MODE_BIN;
+				infile = argv[i+1]; ++i;
+				break;
+			case 'l':
+			case 'L':
+				if (strlen(arg) > 2) valid_args = false;
+				if ((i+1) >= argc) { valid_args = false; break; }
+				mode = MODE_LIST;
+				infile = argv[i+1]; ++i;
+				break;
+			case 's':
+			case 'S':
+				if (strlen(arg) > 2) valid_args = false;
+				if ((i+1) >= argc) { valid_args = false; break; }
+				huffmunch_configure(HUFFMUNCH_SEARCH_WIDTH, strtoul(argv[i+1],NULL,0)); ++i;
+				break;
+			case 'x':
+			case 'X':
+				if (strlen(arg) > 2) valid_args = false;
+				if ((i+1) >= argc) { valid_args = false; break; }
+				huffmunch_configure(HUFFMUNCH_SEARCH_CUTOFF, strtoul(argv[i+1],NULL,0)); ++i;
+				break;
+			default:
 				valid_args = false;
 				break;
 			}
-
-			if      (arg[1] == 'c' || arg[1] == 'C') { canonical = true; continue; }
-			else if (arg[1] == 'v' || arg[1] == 'V') { verbose   = true; continue; }
-			else if (arg[1] == 'd' || arg[1] == 'D') { huffmunch_debug(HUFFMUNCH_DEBUG_FULL); continue; }
-
-			if (mode != -1) // mode already set
-			{
-				valid_args = false;
-				break;
-			}
-			if      (arg[1] == 'b' || arg[1] == 'B') mode = MODE_BIN;
-			else if (arg[1] == 'l' || arg[1] == 'L') mode = MODE_LIST;
-			else // unknown flag
-			{
-				valid_args = false;
-				break;
-			}
-			if ((i+1) >= argc) // no filename argument
-			{
-				valid_args = false;
-				break;
-			}
-			infile = argv[i+1];
-			++i;
+			if (!valid_args) break;
 		}
 		else
 		{

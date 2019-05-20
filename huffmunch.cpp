@@ -27,10 +27,12 @@ const unsigned int SPLIT_OFFSET_SIZE = HUFFMUNCH_HEADER_INTEGER_SIZE;
 // STEP_SIZE 3 is ~1% better compression tham 2, but takes roughly twice as long
 // each subsequent step is about half as effective as the previous, but increases compression time linearly
 // maximum effect is reached around STEP_SIZE 8 where compression gains get lost to estimation noise
-const unsigned int STEP_SIZE = 3;
+const unsigned int MIN_STEP_SIZE = 2;
+const unsigned int MAX_STEP_SIZE = 16;
+unsigned int step_size = 3;
 
 // how many attempts can be made in a single pass before minima is assumed (0 for no limit)
-const unsigned int CUTOFF = 100;
+unsigned int cutoff = 100;
 
 // used big-endian bytes in the bytestream (easier to read in hex debugging tools)
 // but this is configurable:
@@ -1159,11 +1161,11 @@ MunchInput huffmunch_munch(const Stri& data, bool canonical)
 	MunchSize best_size = huffmunch_size(best, canonical);
 
 	// buffers for storing Rabin-Karp style hashes of various widths for repeated string detection
-	vector<elem> rk[STEP_SIZE-1];
-	Counter<elem> rk_freq[STEP_SIZE-1];
+	vector<elem> rk[MAX_STEP_SIZE-1];
+	Counter<elem> rk_freq[MAX_STEP_SIZE-1];
 	const uint RK_PRIME = 467; // rolling hash prime, not a factor of (2^32)-1, "nice" binary representation 111010011
-	uint RK_ERASE[STEP_SIZE-1] = {RK_PRIME};
-	for (int i=1; i<(STEP_SIZE-1); ++i)
+	uint RK_ERASE[MAX_STEP_SIZE-1] = {RK_PRIME};
+	for (int i=1; i<(MAX_STEP_SIZE-1); ++i)
 		RK_ERASE[i] = RK_ERASE[i-1] * RK_PRIME;
 
 	Stri last_symbol;
@@ -1179,6 +1181,7 @@ MunchInput huffmunch_munch(const Stri& data, bool canonical)
 	set<pair<elem, uint>> hash_tried;
 	set<Stri> hash_strings;
 
+	DEBUG_OUT(DBM, "Huffmunch step size: %d, cutoff: %d\n", step_size, cutoff);
 	while (!minima)
 	{
 		// each step:
@@ -1200,7 +1203,7 @@ MunchInput huffmunch_munch(const Stri& data, bool canonical)
 
 		// generate rolling hash for several string widths, count their frequency
 
-		for (uint ss=2; ss<=STEP_SIZE; ++ss)
+		for (uint ss=2; ss<=step_size; ++ss)
 		{
 			const uint si = ss-2; // index to rk
 			const uint su = ss-1;
@@ -1235,7 +1238,7 @@ MunchInput huffmunch_munch(const Stri& data, bool canonical)
 		priority_queue<Task, std::vector<Task>, decltype(task_less)> task_queue(task_less);
 		task_queue.empty();
 
-		for (uint ss=2; ss<=STEP_SIZE; ++ss)
+		for (uint ss=2; ss<=step_size; ++ss)
 		{
 			const uint si = ss-2; // index to rk
 			const uint su = ss-1;
@@ -1333,15 +1336,22 @@ MunchInput huffmunch_munch(const Stri& data, bool canonical)
 				last_symbol_len = ss;
 
 				// test the actual finished size of the new data and tree
-				MunchSize next_size = huffmunch_size(next, canonical);
-				if (next_size < best_size)
+				try
 				{
-					minima = false;
-					best = next;
-					last_bits_saved = best_size - next_size;
-					best_size = next_size;
-					++symbols_added;
-					break;
+					MunchSize next_size = huffmunch_size(next, canonical);
+					if (next_size < best_size)
+					{
+						minima = false;
+						best = next;
+						last_bits_saved = best_size - next_size;
+						best_size = next_size;
+						++symbols_added;
+						break;
+					}
+				}
+				catch (exception e)
+				{
+					DEBUG_OUT(DBM,"skipped attempt: %s\n",e.what());
 				}
 			}
 
@@ -1353,7 +1363,7 @@ MunchInput huffmunch_munch(const Stri& data, bool canonical)
 			hash_tried.insert(pair<elem,uint>(hash,si));
 
 			++last_attempt;
-			if (CUTOFF && last_attempt >= CUTOFF) break;
+			if (cutoff && last_attempt >= cutoff) break;
 
 		} // while (task_queue.size() > 0)
 	} // while (minima)
@@ -1547,6 +1557,24 @@ int huffmunch_decompress(
 	}
 
 	return HUFFMUNCH_OK;
+}
+
+bool huffmunch_configure(unsigned int parameter, unsigned int value)
+{
+	switch(parameter)
+	{
+	case HUFFMUNCH_SEARCH_WIDTH:
+		if (value < MIN_STEP_SIZE) value = MIN_STEP_SIZE;
+		if (value > MAX_STEP_SIZE) value = MAX_STEP_SIZE;
+		step_size = value;
+		break;
+	case HUFFMUNCH_SEARCH_CUTOFF:
+		cutoff = value;
+		break;
+	default:
+		return false;
+	}
+	return true;
 }
 
 void huffmunch_debug(unsigned int debug_bits_, int text)

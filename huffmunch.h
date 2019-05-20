@@ -66,6 +66,17 @@ extern int huffmunch_decompress(
 	unsigned int& output_size,
 	bool canonical = false);
 
+enum
+{
+	HUFFMUNCH_SEARCH_WIDTH,
+	HUFFMUNCH_SEARCH_CUTOFF,
+};
+
+// huffmunch_configure
+extern bool huffmunch_configure(
+	unsigned int parameter,
+	unsigned int value);
+
 // huffmunch_debug diagnostic bitfield
 const unsigned int HUFFMUNCH_DEBUG_OFF       = 0x00000000UL;
 const unsigned int HUFFMUNCH_DEBUG_TREE      = 0x00000001UL;
