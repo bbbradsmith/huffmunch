@@ -135,7 +135,7 @@ a leaf is always guaranteed to be reached.)
 
 Note that the maximum depth of the tree is limited by the width of
 some variables in the decoder. The provided NES implementation uses
-16-bit values, so the default depth is limited to 16.
+24-bit values, so the default depth is limited to 24.
 
 
 Bitstream
