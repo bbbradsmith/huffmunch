@@ -4,6 +4,7 @@ Release/
 *.user
 test/
 cmd.exe.lnk
+test.s
 danger/output/
 danger/cc65/
 danger/danger_build_notepad.bat
