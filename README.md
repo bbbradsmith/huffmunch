@@ -32,7 +32,7 @@ C++ source code for the command line utility is included, and is not platform sp
 * **huffmunch.cpp** - compression library
 * **huffmunch.h** - compression library public interface
 
-A Visual Studio 2017 _.sln_/_.vcproj_ is included to build the Windows version.
+A Visual Studio 2017 _.sln_ is included to build the Windows version.
  A simple _makefile_ is included to build with GCC.
 
 ### Decompression
@@ -53,7 +53,7 @@ There are two versions of the decompression library:
 * **huffmunch.s** - standard version
 * **huffmunch_canonical.s** - canonical version (much slower, slightly better compression)
 
-See the **danger\** folder for an example NES project.
+See the __danger\__ folder for an example NES project.
 
 ## Method
 
