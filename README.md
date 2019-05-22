@@ -11,7 +11,7 @@ Huffmunch is directly inspired by the
  but with an interest in making something suitable for the NES.
 
 Goals:
-* Provides serial decompression of a stream of data.
+* Provides serial decompression of a stream of data, one byte at a time.
 * Uses an extremely small amount of RAM.
 * Takes advantage of random access to ROM for the compressed data.
 * Has reasonable performance on the low-powered 6502 CPU.
@@ -80,7 +80,7 @@ The compressed size performance will also vary a lot depending on
 The canonical variation of the technique represents the compression tree structure in a
  [more compact way](https://en.wikipedia.org/wiki/Canonical_Huffman_code),
  but takes much longer to decode (and more RAM).
- 
+
 ## Other Reference
 
 Compression of NES CHR graphics tiles is adequate, though I would
