@@ -172,7 +172,7 @@ uint write_intx(uint x, vector<u8>& output)
 	}
 	else
 	{
-		if (x >= (1<<16)) throw exception("Unexpectedly large output number?");
+		if (x >= (1<<16)) throw runtime_error("Unexpectedly large output number?");
 		output.push_back(255);
 		output.push_back(x & 255);
 		output.push_back(x >> 8);
@@ -532,7 +532,7 @@ uint huffmunch_tree_bytes_node_s(const HuffTree& tree, const HuffNode* node, con
 	assert (skip >= 3); // leaf must be at least 2 bytes
 	if (skip < 255) return 1 + ta + tb;
 	// skip distance is longer: stored as 255 + 2 bytes
-	if ((skip+2) >= (1<<16)) throw exception("Huffman tree branch unexpectedly large!");
+	if ((skip+2) >= (1<<16)) throw runtime_error("Huffman tree branch unexpectedly large!");
 	return 3 + ta + tb;
 }
 
@@ -649,7 +649,7 @@ void huffmunch_tree_build_node_s(const HuffTree& tree, const HuffNode* node, con
 	else
 	{
 		skip += 2; // add two more bytes for the longer offset in this node
-		if (skip >= (1<<16)) throw exception("Huffman tree branch unexpectedly large!");
+		if (skip >= (1<<16)) throw runtime_error("Huffman tree branch unexpectedly large!");
 		output.push_back(255);
 		output.push_back(skip & 255);
 		output.push_back(skip >> 8);
@@ -679,7 +679,7 @@ void huffmunch_tree_build_s(const HuffTree& tree, const vector<Stri>& symbols, u
 		assert (string_position.find(f.e) != string_position.end());
 		assert (string_position[f.e] >= tree_pos);
 		uint link = string_position[f.e] - tree_pos;
-		if (link >= (1<<16)) throw exception("Unexpectedly large dictionary suffix reference.");
+		if (link >= (1<<16)) throw runtime_error("Unexpectedly large dictionary suffix reference.");
 		assert (output[f.position+0] == 42);
 		assert (output[f.position+1] == 43);
 		output[f.position+0] = link & 255;
@@ -808,11 +808,11 @@ bool huffmunch_decode_s(const vector<u8>& packed, Stri& unpacked)
 // Canonical tree
 //
 
-class DepthException: public exception
+class DepthException: public runtime_error
 {
 public:
 	DepthException(const char* message, unsigned int depth) :
-		exception(message) { last_depth = depth; }
+		runtime_error(message) { last_depth = depth; }
 	static unsigned int last_depth;
 };
 unsigned int DepthException::last_depth = 0;
@@ -843,7 +843,7 @@ uint huffmunch_tree_bytes_c(const HuffTree& tree, const vector<Stri>& symbols)
 	{
 		bytes += 1;
 		if (c > 255) bytes += 2; // if many leaves on this level write 255 + 16-bit number
-		if (c >= (1<<16)) throw exception("Huffman tree level unexpectedly large!");
+		if (c >= (1<<16)) throw runtime_error("Huffman tree level unexpectedly large!");
 	}
 	auto tree_depth = leaf_count.size();
 	if (tree_depth > max_canonical_depth) throw DepthException("Huffman tree unexpectedly deep!", tree_depth);
@@ -871,7 +871,7 @@ uint huffmunch_tree_bytes_c(const HuffTree& tree, const vector<Stri>& symbols)
 		// 1 byte length, string
 		bytes += 1 + s.size();
 	}
-	if (symbol_count > MAX_CANONICAL_SYMBOLS) throw exception("Huffman tree has unexpectedly large number of symbols!");
+	if (symbol_count > MAX_CANONICAL_SYMBOLS) throw runtime_error("Huffman tree has unexpectedly large number of symbols!");
 
 	bytes += 1; // store depth of tree
 	if (tree_depth >= 256) bytes += 2; // stored as 0, 16-bit for very deep trees
@@ -979,14 +979,14 @@ void huffmunch_tree_build_c(const HuffTree& tree, const vector<Stri>& symbols, u
 		}
 		bitcode *= 2; // next available leaf node on next layer will be at 2x index
 	}
-	if (symbol_count > MAX_CANONICAL_SYMBOLS) throw exception("Huffman tree has unexpectedly large number of symbols!");
+	if (symbol_count > MAX_CANONICAL_SYMBOLS) throw runtime_error("Huffman tree has unexpectedly large number of symbols!");
 
 	for (Fixup f : fixup)
 	{
 		assert (string_position.find(f.e) != string_position.end());
 		assert (string_position[f.e] >= (tree_pos+1));
 		uint link = string_position[f.e] - (tree_pos+1);
-		if (link >= (1<<16)) throw exception("Unexpectedly large canonical dictionary suffix reference.");
+		if (link >= (1<<16)) throw runtime_error("Unexpectedly large canonical dictionary suffix reference.");
 		assert (output[f.position+0] == 42);
 		assert (output[f.position+1] == 43);
 		output[f.position+0] = link & 255;

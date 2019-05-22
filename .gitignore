@@ -4,8 +4,12 @@ Release/
 *.user
 test/
 cmd.exe.lnk
-test.s
+/test.s
 danger/output/
 danger/cc65/
 danger/danger_build_notepad.bat
-danger/danger.nes.lnk
+danger/*.lnk
+/main.o
+/huffmunch.o
+/huffmunch
+/huffmunch.exe

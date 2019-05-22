@@ -1,6 +1,6 @@
 # huffmunch
 
-This is a practical generic compression library for the NES or other 6502 platforms.
+A practical generic compression library for the NES or other 6502 platforms.
 
 **This is currently under construction, not yet ready for use.**
 
@@ -16,46 +16,14 @@ It can be used to compress a single binary file,
  in a single package.
 
 ```
-usage:
+basic usage:
     huffmunch -B in.bin out.hfm
         Compress a single file.
     huffmunch -L in.lst out.hfm
         Compress a set of files together from a list file.
-
-optional arguments:
-    -C
-        Canonical tree format, slightly smaller, much slower to decompress.
-    -V
-        Verbose output.
-    -S (width)
-        Wider search is slower, but marginally increases compression, default 3 (range: 2-16).
-    -X (cutoff)
-        Number of missed attempts before halting compression, default 100, 0 unlimited.
-    -H (width)
-        Bytes per integer entry in output header, default 2.
-    -T (depth)
-        Maximum allowed depth of canonical tree, default 24.
-    -D[T/B]
-        Debug output. (-DT text, -DB binary, -D auto)
-
-List files are a simple text format:
-    Line 1: (banks) (size)
-        banks (int) - maximum number of banks to split output into
-                      use 0 for unlimited banks
-                      use 1 if multiple banks are not needed (faster)
-        size (int) - how many bytes allowed in each bank
-    Lines 2+: (start) (end) (file)
-        start (int) - first byte to read from file
-        end (int) - last byte to read from file + 1
-                    use -1 to read the whole file
-        file - name of file extends to end of line
-    The input sources will be compressed together and packed into banks.
-    Integers can be decimal, hexadecimal (0x prefix), or octal (0 prefix).
-    Example output:
-        out.hfm - a table of 2-byte integers giving the end index of each bank
-        out0000.hfm - the first bank
-        out0001.hfm - the second bank
 ```
+
+More detailed usage information can be found by running the utility with no arguments.
 
 C++ source code for the command line utility is included, and is not platform specific.
  The compression library itself is kept separately, and could be integrated into other tools.
@@ -64,7 +32,8 @@ C++ source code for the command line utility is included, and is not platform sp
 * **huffmunch.cpp** - compression library
 * **huffmunch.h** - compression library public interface
 
-A Visual Studio 2017 .sln/.vcproj is included to build the Windows version.
+A Visual Studio 2017 _.sln_/_.vcproj_ is included to build the Windows version.
+ A simple _makefile_ is included to build with GCC.
 
 ### Decompression
 
@@ -113,7 +82,7 @@ The main problem with LZ techniques here is that they require the decompressor
 
 Huffmunch takes a similar approach:
 * A Huffman tree is used to encode symbols optimally according to frequency.
-* Each symbols may represent a single byte, or a longer string.
+* Each symbol may represent a single byte, or a longer string.
 * A symbol may additionally reference another symbol as a suffix.
 
 Here the dictionary is stored directly in the Huffman tree structure,
