@@ -22,7 +22,7 @@ A multibank output has an extra bank table in a separate file:
 
 There are 3 data types that appear in this document:
 
-HEAD = unsigned 16 or 24 bit integer (see: HUFFMUNCH_HEADER_INTEGER_SIZE)
+HEAD = unsigned integer (16-bit by default)
 BYTE = unsigned 8-bit integer
 WORD = unsigned 16-bit integer
 INTX = BYTE (if 0-254), or BYTE 255 followed by WORD
@@ -112,7 +112,7 @@ position, allowing the branch nodes to be implied rather than explicit.
 The table begins with a description of how many levels the tree has,
 and how many leaves are present at each level.
 
-1. INTX - depth of tree
+1. BYTE - depth of tree
 2. INTX x depth - number of leaves at each level of the tree
 
 
@@ -126,8 +126,16 @@ There are two types of strings:
 1. BYTE - 0
 2. BYTE - length of prefix
 3. BYTE x length - bytes to emit
-4. WORD - offset to another string, relative to start of tree data
+4. WORD - offset to another string, relative to start of tree data + 1 byte
 
+The suffix offsets are relative to the second byte of the tree data,
+since the depth is actually ignored during decoder. (For correct data,
+a leaf is always guaranteed to be reached.)
+
+
+Note that the maximum depth of the tree is limited by the width of
+some variables in the decoder. The provided NES implementation uses
+16-bit values, so the default depth is limited to 16.
 
 
 Bitstream

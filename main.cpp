@@ -16,6 +16,7 @@ const int VERSION_MINOR = 0;
 
 bool verbose = false;
 bool canonical = false;
+unsigned int header_width = 2;
 
 int huffmunch_file(const char* file_in, const char* file_out)
 {
@@ -322,14 +323,14 @@ int huffmunch_list(const char* list_file, const char* out_file)
 	}
 	for (unsigned int v: bank_splits)
 	{
-		for (int i=0; i<HUFFMUNCH_HEADER_INTEGER_SIZE; ++i)
+		for (unsigned int i=0; i<header_width; ++i)
 		{
 			fputc(v & 0xFF,fo);
 			v >>= 8;
 		}
 		if (v != 0)
 		{
-			printf("error: entry count exceeds representable size, see HUFFMUNCH_HEADER_INTEGER_SIZE.\n");
+			printf("error: entry count exceeds representable size by header width.\n");
 			fclose(fo);
 			return -1;
 		}
@@ -363,6 +364,10 @@ int print_usage()
 		"        Wider search is slower, but marginally increases compression, default 3 (range: 2-16).\n"
 		"    -X (cutoff)\n"
 		"        Number of missed attempts before halting compression, default 100, 0 unlimited.\n"
+		"    -H (width)\n"
+		"        Bytes per integer entry in output header, default 2.\n"
+		"    -T (depth)\n"
+		"        Maximum allowed depth of canonical tree, default 24.\n"
 		#if HUFFMUNCH_DEBUG
 		"    -D[T/B]\n"
 		"        Debug output. (-DT text, -DB binary, -D auto)\n"
@@ -383,10 +388,10 @@ int print_usage()
 		"    The input sources will be compressed together and packed into banks.\n"
 		"    Integers can be decimal, hexadecimal (0x prefix), or octal (0 prefix).\n"
 		"    Example output:\n"
-		"        out.hfm - a table of %d-byte integer giving the end index of each bank\n"
+		"        out.hfm - a table of %d-byte integers giving the end index of each bank\n"
 		"        out0000.hfm - the first bank\n"
 		"        out0001.hfm - the second bank\n"
-		"\n", HUFFMUNCH_HEADER_INTEGER_SIZE);
+		"\n", header_width);
 	printf("huffmunch version %d.%d\n",
 		VERSION_MAJOR, VERSION_MINOR);
 	return -1;
@@ -400,7 +405,7 @@ int main(int argc, const char** argv)
 	const int MODE_BIN = 0;
 	const int MODE_LIST = 1;
 
-	//huffmunch_debug(HUFFMUNCH_DEBUG_FULL);
+	huffmunch_configure(HUFFMUNCH_HEADER_WIDTH, header_width); // just to ensure it matches print_usage()
 
 	bool valid_args = true;
 	for (int i=1; i<argc; ++i)
@@ -465,6 +470,18 @@ int main(int argc, const char** argv)
 				if (strlen(arg) > 2) valid_args = false;
 				if ((i+1) >= argc) { valid_args = false; break; }
 				huffmunch_configure(HUFFMUNCH_SEARCH_CUTOFF, strtoul(argv[i+1],NULL,0)); ++i;
+				break;
+			case 'h':
+			case 'H':
+				if (strlen(arg) > 2) valid_args = false;
+				if ((i+1) >= argc) { valid_args = false; break; }
+				huffmunch_configure(HUFFMUNCH_HEADER_WIDTH, strtoul(argv[i+1],NULL,0)); ++i;
+				break;
+			case 't':
+			case 'T':
+				if (strlen(arg) > 2) valid_args = false;
+				if ((i+1) >= argc) { valid_args = false; break; }
+				huffmunch_configure(HUFFMUNCH_CANONICAL_DEPTH, strtoul(argv[i+1],NULL,0)); ++i;
 				break;
 			default:
 				valid_args = false;

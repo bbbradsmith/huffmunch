@@ -86,7 +86,7 @@ for p in pages:
         if c == "\n":
             c = 0
         elif c == "ê":
-            c = 0x10
+            c = ord('e') # de-ornament crêpes suzette
         else:
             c = ord(c)
         b.append(c)

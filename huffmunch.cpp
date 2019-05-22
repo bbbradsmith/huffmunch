@@ -17,10 +17,16 @@ using namespace std;
 // the longest allowed length of a dictionary symbol
 const unsigned int MAX_SYMBOL_SIZE = 255;
 
-// size of allowed offset splits
+// the greatest tree depth allowed for canonical mode
+static unsigned int max_canonical_depth = 24;
+
+// the greatest number of symbols allowed for canonical mode
+static unsigned int MAX_CANONICAL_SYMBOLS = 65536;
+
+// size of integers in header (maximum stream size)
 // 2 bytes = 64 KB maximum output size
 // 3 bytes = 16 MB maximum output size
-const unsigned int SPLIT_OFFSET_SIZE = HUFFMUNCH_HEADER_INTEGER_SIZE;
+static unsigned int header_width = 2;
 
 // how many symbols can be combined into a larger one in a single pass (minimum 2)
 // increasing this marginally increases the ability to get over local minima
@@ -29,10 +35,10 @@ const unsigned int SPLIT_OFFSET_SIZE = HUFFMUNCH_HEADER_INTEGER_SIZE;
 // maximum effect is reached around STEP_SIZE 8 where compression gains get lost to estimation noise
 const unsigned int MIN_STEP_SIZE = 2;
 const unsigned int MAX_STEP_SIZE = 16;
-unsigned int step_size = 3;
+static unsigned int step_size = 3;
 
 // how many attempts can be made in a single pass before minima is assumed (0 for no limit)
-unsigned int cutoff = 100;
+static unsigned int cutoff = 100;
 
 // used big-endian bytes in the bytestream (easier to read in hex debugging tools)
 // but this is configurable:
@@ -191,41 +197,41 @@ uint read_intx(uint pos, const vector<u8>& packed, uint& out)
 
 }
 
-// for packing unsigned integers of SPLIT_OFFSET_SIZE into the header
+// for packing unsigned integers of header_width into the header
 bool pack_header(uint v, uint index, vector<u8>& header)
 {
-	uint ix = index * SPLIT_OFFSET_SIZE;
-	if ((ix + SPLIT_OFFSET_SIZE) > header.size())
+	uint ix = index * header_width;
+	if ((ix + header_width) > header.size())
 	{
 		DEBUG_OUT(DBI,"no room for header?\n");
 		return false;
 	}
 	uint vs = v;
-	for (uint i=0; i<SPLIT_OFFSET_SIZE; ++i)
+	for (uint i=0; i<header_width; ++i)
 	{
 		header[ix+i] = vs & 0xFF;
 		vs >>= 8;
 	}
 	if (vs != 0)
 	{
-		DEBUG_OUT(DBH,"split value (%d) too large for SPLIT_OFFSET_SIZE\n",v);
+		DEBUG_OUT(DBH,"split value (%d) too large for header integer size.\n",v);
 		return false;
 	}
 	return true;
 }
 
-// for unpacking unsigned integers of SPLIT_OFFSET_SIZE from the header
+// for unpacking unsigned integers of header_width from the header
 uint unpack_header(uint index, const vector<u8>& header)
 {
-	uint ix = index * SPLIT_OFFSET_SIZE;
-	if ((ix + SPLIT_OFFSET_SIZE) > header.size())
+	uint ix = index * header_width;
+	if ((ix + header_width) > header.size())
 	{
 		DEBUG_OUT(DBH,"header not large enough for requested data?\n");
 		return ~0UL;
 	}
 	uint v = 0;
 	uint s = 0;
-	for (uint i=0; i<SPLIT_OFFSET_SIZE; ++i)
+	for (uint i=0; i<header_width; ++i)
 	{
 		v |=  header[ix+i] << s;
 		s += 8;
@@ -695,7 +701,7 @@ bool huffmunch_decode_s(const vector<u8>& packed, Stri& unpacked)
 		split_start.push_back(unpack_header(1+i, packed));
 		split_size.push_back(unpack_header(1+i+split_count,packed));
 	}
-	const uint table_pos = (1 + (split_count * 2)) * SPLIT_OFFSET_SIZE;
+	const uint table_pos = (1 + (split_count * 2)) * header_width;
 
 	BitReader bitstream(&packed);
 
@@ -802,6 +808,15 @@ bool huffmunch_decode_s(const vector<u8>& packed, Stri& unpacked)
 // Canonical tree
 //
 
+class DepthException: public exception
+{
+public:
+	DepthException(const char* message, unsigned int depth) :
+		exception(message) { last_depth = depth; }
+	static unsigned int last_depth;
+};
+unsigned int DepthException::last_depth = 0;
+
 void huffmunch_tree_bytes_node_c(const HuffNode* node, uint depth, vector<uint>& leaf_count)
 {
 	while (leaf_count.size() < (depth+1)) leaf_count.push_back(0);
@@ -831,13 +846,15 @@ uint huffmunch_tree_bytes_c(const HuffTree& tree, const vector<Stri>& symbols)
 		if (c >= (1<<16)) throw exception("Huffman tree level unexpectedly large!");
 	}
 	auto tree_depth = leaf_count.size();
-	if (tree_depth >= (1<<16)) throw exception("Huffman tree unexpectedly deep!");
+	if (tree_depth > max_canonical_depth) throw DepthException("Huffman tree unexpectedly deep!", tree_depth);
 
 	// generate the string table
+	uint symbol_count = 0;
 	for (elem j=0; j<symbols.size(); ++j)
 	{
 		if (!tree.visited[j]) continue;
 		Stri s = symbols[j];
+		++symbol_count;
 
 		static_assert(MAX_SYMBOL_SIZE <= 255, "huffmunch tree data structure does not support leaf strings longer than 255 bytes.");
 		assert(s.size() <= MAX_SYMBOL_SIZE);
@@ -854,6 +871,7 @@ uint huffmunch_tree_bytes_c(const HuffTree& tree, const vector<Stri>& symbols)
 		// 1 byte length, string
 		bytes += 1 + s.size();
 	}
+	if (symbol_count > MAX_CANONICAL_SYMBOLS) throw exception("Huffman tree has unexpectedly large number of symbols!");
 
 	bytes += 1; // store depth of tree
 	if (tree_depth >= 256) bytes += 2; // stored as 0, 16-bit for very deep trees
@@ -890,8 +908,8 @@ void huffmunch_tree_build_c(const HuffTree& tree, const vector<Stri>& symbols, u
 	huffmunch_tree_build_node_c(tree.head, 0, leaves);
 
 	// write count table
-	if (leaves.size() >= 255) throw exception("Huffman tree unexpectedly deep!");
-	write_intx(leaves.size(),output); // length of table
+	if (leaves.size() > max_canonical_depth) throw DepthException("Huffman tree unexpectedly deep!",leaves.size());
+	output.push_back(u8(leaves.size())); // length of table
 	for (uint d=0; d < leaves.size(); ++d)
 	{
 		write_intx(leaves[d].size(), output); // nodes at each level
@@ -905,6 +923,7 @@ void huffmunch_tree_build_c(const HuffTree& tree, const vector<Stri>& symbols, u
 	vector<Fixup> fixup;
 	unordered_map<elem,uint> string_position;
 
+	uint symbol_count = 0;
 	uint bitcode = 0;
 	for (uint d=0; d < leaves.size(); ++d)
 	{
@@ -924,6 +943,7 @@ void huffmunch_tree_build_c(const HuffTree& tree, const vector<Stri>& symbols, u
 			Stri s = symbols[e];
 			assert(s.size() < 256); // this format doesn't support larger symbols
 			uint emit = s.size();
+			++symbol_count;
 
 			#if HUFFMUNCH_DEBUG
 			if (debug_bits & DBT) print_stri(s);
@@ -959,12 +979,13 @@ void huffmunch_tree_build_c(const HuffTree& tree, const vector<Stri>& symbols, u
 		}
 		bitcode *= 2; // next available leaf node on next layer will be at 2x index
 	}
+	if (symbol_count > MAX_CANONICAL_SYMBOLS) throw exception("Huffman tree has unexpectedly large number of symbols!");
 
 	for (Fixup f : fixup)
 	{
 		assert (string_position.find(f.e) != string_position.end());
-		assert (string_position[f.e] >= tree_pos);
-		uint link = string_position[f.e] - tree_pos;
+		assert (string_position[f.e] >= (tree_pos+1));
+		uint link = string_position[f.e] - (tree_pos+1);
 		if (link >= (1<<16)) throw exception("Unexpectedly large canonical dictionary suffix reference.");
 		assert (output[f.position+0] == 42);
 		assert (output[f.position+1] == 43);
@@ -987,7 +1008,7 @@ bool huffmunch_decode_c(const vector<u8>& packed, Stri& unpacked)
 		split_start.push_back(unpack_header(1+i, packed));
 		split_size.push_back(unpack_header(1+i+split_count,packed));
 	}
-	const uint table_pos = (1 + (split_count * 2)) * SPLIT_OFFSET_SIZE;
+	const uint table_pos = (1 + (split_count * 2)) * header_width;
 
 	uint pos = table_pos;
 
@@ -1106,7 +1127,7 @@ bool huffmunch_decode_c(const vector<u8>& packed, Stri& unpacked)
 						--length;
 					}
 					// repeat loop from new suffix string
-					uint suffix_pos = packed[pos+0] + (packed[pos+1] << 8) + table_pos;
+					uint suffix_pos = packed[pos+0] + (packed[pos+1] << 8) + table_pos + 1;
 					pos = suffix_pos;
 					remains = true;
 					DEBUG_OUT(DBV,"(%d),",pos);
@@ -1398,6 +1419,8 @@ bool splits_valid(const unsigned int* splits, unsigned int split_count)
 
 const char* huffmunch_error_description(int e)
 {
+	static char last_error[256] = "";
+
 	switch (e)
 	{
 	case HUFFMUNCH_OK: return "No error.";
@@ -1405,7 +1428,12 @@ const char* huffmunch_error_description(int e)
 	case HUFFMUNCH_VERIFY_FAIL: return "Internal verification error.";
 	case HUFFMUNCH_INTERNAL_ERROR: return "Internal error.";
 	case HUFFMUNCH_INVALID_SPLITS: return "Splits must have increasing order, beginning with 0.";
-	case HUFFMUNCH_SPLIT_OVERFLOW: return "Split offset or data size too large for SPLIT_OFFSET_SIZE.";
+	case HUFFMUNCH_HEADER_OVERFLOW: return "Split offset or data size too large for header integer size.";
+	case HUFFMUNCH_DEPTH_OVERFLOW:
+	{
+		snprintf(last_error,sizeof(last_error),"Canonical tree too deep (%d > %d)\n",DepthException::last_depth,max_canonical_depth);
+		return last_error;
+	}
 	default: return "Unknown error value.";
 	}
 }
@@ -1456,7 +1484,7 @@ int huffmunch_compress(
 		// 1 x split count
 		// split_count x split data offset
 		// split_count x split data size
-		uint prefix_size = ((split_count * 2) + 1) * SPLIT_OFFSET_SIZE;
+		uint prefix_size = ((split_count * 2) + 1) * header_width;
 		for (uint i=0; i<prefix_size; ++i) packed.push_back(44); // reserve space for header
 
 		huffman_tree(best, tree);
@@ -1466,7 +1494,7 @@ int huffmunch_compress(
 		huffman_encode(codes, best.data, packed, packed_splits);
 
 		DEBUG_OUT(DBH,"split_count: %d\n",split_count);
-		if (!pack_header(split_count, 0, packed)) return HUFFMUNCH_SPLIT_OVERFLOW;
+		if (!pack_header(split_count, 0, packed)) return HUFFMUNCH_HEADER_OVERFLOW;
 		for (unsigned int i=0; i<split_count; ++i)
 		{
 			uint split_packed_start = packed_splits[i];
@@ -1476,8 +1504,8 @@ int huffmunch_compress(
 			uint split_size = split_end - split_start;
 
 			DEBUG_OUT(DBH,"split %d: %X (%X, %d bytes)\n",i,split_packed_start,split_start,split_size);
-			if (!pack_header(split_packed_start, 1+i, packed)) return HUFFMUNCH_SPLIT_OVERFLOW;
-			if (!pack_header(split_size, 1+split_count+i, packed)) return HUFFMUNCH_SPLIT_OVERFLOW;
+			if (!pack_header(split_packed_start, 1+i, packed)) return HUFFMUNCH_HEADER_OVERFLOW;
+			if (!pack_header(split_size, 1+split_count+i, packed)) return HUFFMUNCH_HEADER_OVERFLOW;
 		}
 
 		#if HUFFMUNCH_DEBUG
@@ -1510,6 +1538,11 @@ int huffmunch_compress(
 			for (unsigned int i=0; i < packed.size(); ++i)
 				output[i] = packed[i];
 		}
+	}
+	catch (DepthException e)
+	{
+		DEBUG_OUT(DBT,"error: canonical depth overflow (%d > %d)\n",DepthException::last_depth,max_canonical_depth);
+		return HUFFMUNCH_DEPTH_OVERFLOW;
 	}
 	catch (exception e)
 	{
@@ -1570,6 +1603,15 @@ bool huffmunch_configure(unsigned int parameter, unsigned int value)
 		break;
 	case HUFFMUNCH_SEARCH_CUTOFF:
 		cutoff = value;
+		break;
+	case HUFFMUNCH_HEADER_WIDTH:
+		if (value < 1) value = 1;
+		if (value > 4) value = 4;
+		header_width = value;
+		break;
+	case HUFFMUNCH_CANONICAL_DEPTH:
+		if (value > 255) value = 255;
+		max_canonical_depth = value;
 		break;
 	default:
 		return false;

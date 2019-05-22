@@ -4,11 +4,6 @@
 // Brad Smith, 2019
 // https://github.com/bbbradsmith/huffmunch
 
-// Headers and bank tables will use this size for integers.
-// 2 bytes = 64 KB maximum output size
-// 3 bytes = 16 MB maximum output size
-#define HUFFMUNCH_HEADER_INTEGER_SIZE 2
-
 // setting this to 0 disables the effect of huffmunch_debug() and removes some redundant checks
 #define HUFFMUNCH_DEBUG 1
 
@@ -18,7 +13,8 @@ const int HUFFMUNCH_OUTPUT_OVERFLOW = 1; // too much data for output buffer
 const int HUFFMUNCH_VERIFY_FAIL = 2; // internal error: verify failed
 const int HUFFMUNCH_INTERNAL_ERROR = 3; // internal error: use HUFFMUNCH_DEBUG_INTERNAL for diagnostic
 const int HUFFMUNCH_INVALID_SPLITS = 4; // splits must start with 0 and have increasing order
-const int HUFFMUNCH_SPLIT_OVERFLOW = 5; // split values overflow SPLIT_OFFSET_SIZE
+const int HUFFMUNCH_HEADER_OVERFLOW = 5; // split values overflow header width
+const int HUFFMUNCH_DEPTH_OVERFLOW = 6; // tree depth exceeds canonical allowed depth
 
 // huffmunch_error_description
 //   brief description of the return values above
@@ -68,8 +64,10 @@ extern int huffmunch_decompress(
 
 enum
 {
-	HUFFMUNCH_SEARCH_WIDTH,
-	HUFFMUNCH_SEARCH_CUTOFF,
+	HUFFMUNCH_SEARCH_WIDTH, // maximum symbols to merge per pass, 2-16, default 3
+	HUFFMUNCH_SEARCH_CUTOFF, // number of retries before concluding search, default 100, 0 unlimited
+	HUFFMUNCH_HEADER_WIDTH, // width of integers in header 1-4, default 2
+	HUFFMUNCH_CANONICAL_DEPTH, // maximum tree depth in canonical mode 1-255, default 16
 };
 
 // huffmunch_configure
