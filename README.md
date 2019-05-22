@@ -48,9 +48,9 @@ The compression algorithm itself is currently a fairly naïve
 5. Otherwise try the next most likely substring, until one that successfully shrinks
    the data is found (return to 2), or after enough attempts end the search.
 
-Eventually the tree will grow large enough that adding a new symbol requires more
- tree data than can be saved by that symbol's repetition. At this point,
- compression will stop.
+Longer repeated strings will gradually be built up from shorter ones that can combine.
+ Eventually the tree will grow large enough that adding a new symbol requires more
+ tree data than can be saved by that symbol's repetition; at that point compression will cease.
 
 There may be more optimal ways to do this, but this was relatively simple to implement,
  and seems to perform well enough on data sets that are a reasonable size for the NES.
