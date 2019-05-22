@@ -77,6 +77,10 @@ The compressed size performance will also vary a lot depending on
  Typically huffmunch does not do as well as the DEFLATE algorithm
  which inspired it, but does at least reach the same ballpark.
 
+The canonical variation of the technique represents the compression tree structure in a
+ [more compact way](https://en.wikipedia.org/wiki/Canonical_Huffman_code),
+ but takes much longer to decode (and more RAM).
+ 
 ## Other Reference
 
 Compression of NES CHR graphics tiles is adequate, though I would
