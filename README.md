@@ -25,7 +25,7 @@ The compressed size performance will also vary a lot depending on
 
 Compression of NES CHR graphics tiles is adequate, though I would
  recommend the [donut CHR compressor](https://github.com/jroatch/donut-nes)
- by [https://github.com/jroatch](jroatch) as a more effective alternative
+ by [jroatch](https://github.com/jroatch) as a more effective alternative
  for that specific purpose.
 
 Another useful reference is bregalad's
