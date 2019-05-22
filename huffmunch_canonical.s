@@ -24,7 +24,7 @@ hm_dc      = <(huffmunch_zpblock + 18) ; depth-relative code (16-bit)
 hm_ds      = <(huffmunch_zpblock + 20) ; string count at current depth (16-bit)
 hm_s       = <(huffmunch_zpblock + 22) ; current string reached (16-bit)
 
-.assert (huffmunch_zpblock + 24) <= 256, error, "huffmunch_zpblock requires 27 bytes on zero page"
+.assert (huffmunch_zpblock + 24) <= 256, error, "huffmunch_zpblock requires 24 bytes on zero page"
 
 ; NOTE: only hm_node and hm_stream need to be on ZP
 ;       the rest could go elsewhere, but still recommended for ZP
