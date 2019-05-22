@@ -19,13 +19,13 @@ The performance of this compression method is measured here on the
 
 The compressed size performance will also vary a lot depending on
  the type of data used. Plain text seems to regularly do better
- than 50%. Random data may reverse-compress to larger than 100%.
+ than 50%. True random data may reverse-compress to slightly larger than 100%.
  Typically huffmunch does not do as well as the DEFLATE algorithm
  which inspired it, but does at least reach the same ballpark.
 
 Compression of NES CHR graphics tiles is adequate, though I would
  recommend the [donut CHR compressor](https://github.com/jroatch/donut-nes)
- by (https://github.com/jroatch)[jroatch] as a more effective alternative
+ by [https://github.com/jroatch](jroatch) as a more effective alternative
  for that specific purpose.
 
 Another useful reference is bregalad's
