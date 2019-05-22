@@ -40,6 +40,21 @@ TT = (H-len(title_text))//2
 TB = H-(TT+len(title_text))
 title = ([""]*TT) + title_text + ([""]*TB)
 
+appendix = [
+    #---------------------------
+    "This was a demonstration of",
+    "the huffmunch compression",
+    "tool for NES, written by",
+    "Brad Smith, 2019.",
+    "",
+    "For more information,",
+    "please visit:",
+    "",
+    " https://github.com/",
+    "  bbbradsmith/huffmunch",
+    "",
+    ]
+
 paragraphs = []
 for line in open("danger.txt","rt").readlines()[3:-1]:
     l = line.rstrip();
@@ -77,6 +92,14 @@ for p in paragraphs:
         add_line(s)
 for i in range(page_line,H): # finish last page
     pages[len(pages)-1] += "\n"
+
+pages.append("") # appendix page
+assert(len(appendix) <= H)
+for i in range(0,H):
+    l = ""
+    if i >= (H - len(appendix)):
+        l = appendix[i - (H - len(appendix))]
+    pages[len(pages)-1] += l + "\n"
 
 s = "%d %d\n" % (BANKCOUNT, BANKSIZE)
 b = bytearray()

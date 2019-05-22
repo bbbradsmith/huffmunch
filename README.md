@@ -3,6 +3,56 @@ This is the future home of a practical generic compression library for the NES o
 
 This is currently under construction, not yet ready for use.
 
+## Method
+
+This algorithm is directly inspired by the
+ [DEFLATE](https://en.wikipedia.org/wiki/DEFLATE)
+ algorithm widely known for its use in the ZIP file format,
+ but with an interest in making something suitable for the NES.
+
+Main goals:
+* Provides serial decompression of a stream of data.
+* Uses an extremely small amount of RAM.
+* Takes advantage of random access to ROM for the compressed data.
+* Has reasonable performance on the low-powered 6502 CPU.
+
+At a high level, DEFLATE uses a two major compression techniques in tandem:
+* An [LZ algorithm](https://en.wikipedia.org/wiki/LZ77_and_LZ78)
+  builds a dictionary of commonly repeated substrings of symbols as the data is decompressed,
+  and allows further repetitions of these dictionary entries to be replaced by a much smaller reference.
+* A [Huffman tree](https://en.wikipedia.org/wiki/Huffman_coding)
+  uses distribution of symbol frequency to find an optimal way to store
+  the stream of symbols and references.
+
+The main problem with LZ techniques here is that they require the decompressor
+ to build up a dictionary out of the decompressed data, meaning it the decompressed
+ data has to be stored in RAM so that it can be accessed.
+ With
+
+Huffmunch takes a similar, but inverted approach:
+* A Huffman tree is used to encode symbols optimally according to frequency.
+* Symbols may represent a single byte, or a longer string.
+* Symbols may additionally reference another symbol as a suffix.
+
+Here the dictionary is stored in the Huffman tree structure,
+and the suffix ability allows longer symbols to combine their data with shorter ones
+for some added efficiency. Because the tree structure explicitly contains
+all the symbols to be decoded, it can reside in ROM, and only a trivial amount of RAM
+is needed to traverse the tree.
+
+The compression algorithm itself is currently a fairly naïve
+ [hill climbing](https://en.wikipedia.org/wiki/Hill_climbing) method:
+1. Assign every byte in the stream a symbol in the huffman tree/dictionary.
+2. Look for any short substrings that are repeated and prioritize them by frequency/length.
+3. Try replacing the best repeating substring with a new symbol, and add it to the dictionary.
+4. If the resulting compressed data (tree + bitstream) is smaller, keep the new symbol and return to 2.
+5. Otherwise try the next most likely substring, until one that successfully shrinks the data is found (return to 2), or after enough attempts end the search.
+
+There may be more optimal ways to do this, but this was relatively simple to implement,
+ and seems to perform well enough on data sets that are a reasonable size for the NES.
+ I'm open to suggestions for improvement here.
+
+## Performance
 
 The performance of this compression method is measured here on the
  data used for the Dangerous Game example. The average decompression
@@ -22,6 +72,8 @@ The compressed size performance will also vary a lot depending on
  than 50%. True random data may reverse-compress to slightly larger than 100%.
  Typically huffmunch does not do as well as the DEFLATE algorithm
  which inspired it, but does at least reach the same ballpark.
+
+## Other Reference
 
 Compression of NES CHR graphics tiles is adequate, though I would
  recommend the [donut CHR compressor](https://github.com/jroatch/donut-nes)
