@@ -4,6 +4,88 @@ This is a practical generic compression library for the NES or other 6502 platfo
 
 **This is currently under construction, not yet ready for use.**
 
+## Usage
+
+### Compression
+
+A command line tool is provided as a Windows binary: **huffmunch.exe**
+
+It can be used to compress a single binary file,
+ or it can operate on a list of files (or list of segments of a single file)
+ so that several pieces of correlated data can be compressed together
+ in a single package.
+
+```
+usage:
+    huffmunch -B in.bin out.hfm
+        Compress a single file.
+    huffmunch -L in.lst out.hfm
+        Compress a set of files together from a list file.
+
+optional arguments:
+    -C
+        Canonical tree format, slightly smaller, much slower to decompress.
+    -V
+        Verbose output.
+    -S (width)
+        Wider search is slower, but marginally increases compression, default 3 (range: 2-16).
+    -X (cutoff)
+        Number of missed attempts before halting compression, default 100, 0 unlimited.
+    -H (width)
+        Bytes per integer entry in output header, default 2.
+    -T (depth)
+        Maximum allowed depth of canonical tree, default 24.
+    -D[T/B]
+        Debug output. (-DT text, -DB binary, -D auto)
+
+List files are a simple text format:
+    Line 1: (banks) (size)
+        banks (int) - maximum number of banks to split output into
+                      use 0 for unlimited banks
+                      use 1 if multiple banks are not needed (faster)
+        size (int) - how many bytes allowed in each bank
+    Lines 2+: (start) (end) (file)
+        start (int) - first byte to read from file
+        end (int) - last byte to read from file + 1
+                    use -1 to read the whole file
+        file - name of file extends to end of line
+    The input sources will be compressed together and packed into banks.
+    Integers can be decimal, hexadecimal (0x prefix), or octal (0 prefix).
+    Example output:
+        out.hfm - a table of 2-byte integers giving the end index of each bank
+        out0000.hfm - the first bank
+        out0001.hfm - the second bank
+```
+
+C++ source code for the command line utility is included, and is not platform specific.
+ The compression library itself is kept separately, and could be integrated into other tools.
+
+* **main.cpp** - command line utility
+* **huffmunch.cpp** - compression library
+* **huffmunch.h** - compression library public interface
+
+A Visual Studio 2017 .sln/.vcproj is included to build the Windows version.
+
+### Decompression
+
+The decompression library is provided as 6502 assembly in ca65 ([cc65](https://cc65.github.io/)) syntax.
+
+1. Allocate 9 bytes of RAM and .export as **huffmunch_zpblock**.
+2. Fill the first 2 bytes of _huffmunch_zpblock_ with the address of the binary output of the compressor tool.
+3. Set Y:X equal to the index of the data you want to decompress from the binary.
+4. Call **huffmunch_load** to prepare to begin decompressing the stream.
+5. The length of the data will be returned from _huffmunch_load_ in Y:X.
+6. The total number of data blocks will also be returned in the first 2 bytes of _huffmunch_zpblock_.
+7. Call **huffmunch_read** once to reach each byte of uncompressed data.
+8. Once the data has been read out, the bytes of _huffmunch_zpblock_ are not needed and can be freely used until another data block is needed.
+
+There are two versions of the decompression library:
+
+* **huffmunch.s** - standard version
+* **huffmunch_canonical.s** - canonical version (much slower, slightly better compression)
+
+See the **danger\** folder for an example NES project.
+
 ## Method
 
 Huffmunch is directly inspired by the
@@ -92,3 +174,14 @@ Compression of NES CHR graphics tiles is adequate, though I would
 Another useful reference is bregalad's
  [Compress Tools](https://www.romhacking.net/utilities/882/)
  which demonstrate several NES-viable compression methods.
+
+## License
+
+This library may be used, reused, and modified for any purpose, commercial or non-commercial.
+ If distributing source code, do not remove the attribution to its original author,
+ and document any modifications with attribution to their new author as well.
+
+Attribution in released binaries or documentation is appreciated but not required.
+
+If you'd like to support this project or its author, please visit:
+ [Patreon](https://www.patreon.com/rainwarrior)
