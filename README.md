@@ -13,7 +13,7 @@ The performance of this compression method is measured here on the
 
 | Method       | Average Speed    | Code Size | RAM Required  | Compressed Data Size |
 | ------------ | ---------------- | --------- | ------------- | -------------------- |
-| Uncompressed |   26 cycles/byte |  10 bytes |      0 bytes  | 45418 bytes (100.0%) |
+| Uncompressed |   26 cycles/byte |  10 bytes |      2 bytes  | 45418 bytes (100.0%) |
 | Standard     |  260 cycles/byte | 330 bytes |      9 bytes  | 21520 bytes (47.69%) |
 | Canonical    | 1000 cycles/byte | 578 bytes |     26 bytes  | 20751 bytes (45.99%) |
 
