@@ -46,16 +46,20 @@ ppu_2000: .res 1
 ppu_2001: .res 1
 
 ; gamepad
-gamepad_old: .res 2
-gamepad:     .res 2
-gamepad_new: .res 1 ; buttons pressed since last poll
+gamepads_old: .res 2
+gamepads:     .res 2
+gamepad_new:  .res 1 ; buttons pressed since last poll
+gamepad:      .res 1 ; OR of both gamepads
 
 ; selection
 page:       .res 1
 page_count: .res 1
 page_bytes: .res 2 ; just for debugging
+page_index: .res 1 ; page selection on index screen
 i:          .res 1 ; temporary counter
 j:          .res 1 ; temporary counter
+k:          .res 1 ; temporary counter
+draw_nmt:   .res 1 ; next nametable to draw ($20 or $24)
 
 ; huffmunch data
 .exportzp huffmunch_zpblock
@@ -106,36 +110,13 @@ oam: .res 256
 .proc prepare_story_page
 	jsr prepare_story_huffmunch
 	ldx page
+	cpx #255
+	beq :+ ; skip for index page
 	ldy #0
 	jsr huffmunch_load
 	sty page_bytes+1
 	stx page_bytes+0
-	rts
-.endproc
-
-; read one line of story from page
-.proc prepare_story_line
-	ldx #0
-	stx i
-	:
-		jsr huffmunch_read
-		cmp #0
-		beq :+
-		ldx i
-		sta nmi_buffer, X
-		inc i
-		jmp :-
-	:
-	lda #' '
-	ldx i
-	cpx #PAGE_W
-	beq :++
-	:
-		sta nmi_buffer, X
-		inx
-		cpx #PAGE_W
-		bcc :-
-	:
+:
 	rts
 .endproc
 
@@ -159,14 +140,39 @@ oam: .res 256
 		sbc #10
 		jmp :-
 	:
+	; Y:X:A = raw decimal values
+	clc
+	adc #'0'
+	pha
+	tya
+	beq hide_100s
+	clc
+	adc #'0'
+	tay
+	txa
+show_10s:
+	clc
+	adc #'0'
+	jmp finish
+hide_100s:
+	lda #' '
+	tay
+	txa
+	bne show_10s
+	lda #' '
+finish:
+	tax
+	pla
+	; Y:X:A = ascii number with leading zeroes replaced by spaces
 	rts
 .endproc
 
-.proc prepare_page_number_line
+; places a line number for the current page on the second row of nmi_update
+.proc prepare_page_number
 	lda #' '
 	ldx #0
 	:
-		sta nmi_buffer, X
+		sta nmi_buffer+PAGE_W, X
 		inx
 		cpx #PAGE_W
 		bcc :-
@@ -175,26 +181,196 @@ oam: .res 256
 	cmp #255
 	beq skip ; index page (no number)
 	jsr decimal
-	; draw 1s always
-	clc
-	adc #'0'
-	sta nmi_buffer+PAGE_W-1
-	tya
-	beq under_100
-	; draw 100s if not 0
-	clc
-	adc #'0'
-	sta nmi_buffer+PAGE_W-3
-	txa
-draw_10s:
-	clc
-	adc #'0'
-	sta nmi_buffer+PAGE_W-2
-	rts
-under_100:
-	txa
-	bne draw_10s ; draw 10s if not a leading 0
+	sty nmi_buffer+(2*PAGE_W)-3
+	stx nmi_buffer+(2*PAGE_W)-2
+	sta nmi_buffer+(2*PAGE_W)-1
 skip:
+	rts
+.endproc
+
+; places a line number for the current page on the first row of nmi_update (clobbers second row)
+.proc prepare_page_number_single
+	jsr prepare_page_number
+	ldx #0
+	:
+		lda nmi_buffer+PAGE_W, X
+		sta nmi_buffer, X
+		inx
+		cpx #PAGE_W
+		bcc :-
+	rts
+.endproc
+
+; fills nmi_buffer with index page
+; X = 0-12
+.proc prepare_index_line_pair
+	lda #' '
+	ldy #0
+	:
+		sta nmi_buffer, Y
+		iny
+		cpy #(2*PAGE_W)
+		bcc :-
+	cpx #0 ; first 2 rows empty
+	bne :+
+		rts
+	:
+	cpx #1 ; second 2 rows say "INDEX" on their lower row
+	bne :++
+		ldy #0
+		:
+			lda index_text, Y
+			sta nmi_buffer+PAGE_W, Y
+			iny
+			cpy #INDEX_TEXT_LEN
+			bcc :-
+		rts
+	:
+	cpx #2 ; third 2 rows empty
+	bne :+
+		rts
+	:
+	; subsequent rows show page numbers
+	txa
+	sec
+	sbc #3
+	; * 10
+	sta i
+	asl
+	asl
+	clc
+	adc i
+	asl
+	sta i
+	ldy #0
+	:
+		sty j
+		lda i
+		cmp page_count
+		bcs :+
+		jsr decimal
+		pha
+		txa
+		pha
+		tya
+		pha
+		ldy j
+		ldx number_position, Y
+		pla
+		sta nmi_buffer+0, X
+		pla
+		sta nmi_buffer+1, X
+		pla
+		sta nmi_buffer+2, X
+		inc i
+		iny
+		cpy #10
+		bcc :-
+	:
+	rts
+index_text:
+	.byte " INDEX"
+	INDEX_TEXT_LEN = *-index_text
+number_position:
+	.repeat 5, I
+		.byte 3 + (I*5)
+	.endrepeat
+	.repeat 5, I
+		.byte PAGE_W + 3 + (I*5)
+	.endrepeat
+.endproc
+
+; fills nmi_buffer with two lines
+; X = 0-12
+.proc prepare_page_line_pair
+	; setup write address
+	lda #0
+	sta i
+	txa
+	asl
+	clc
+	adc #2
+	asl
+	;rol i
+	asl
+	;rol i
+	asl
+	;rol i
+	asl
+	rol i
+	asl
+	rol i ; (x + 2) * 32
+	clc
+	adc #<2
+	sta nmi_addr+0
+	lda draw_nmt
+	adc i
+	sta nmi_addr+1
+	; index has a separate routine
+	lda page
+	cmp #255
+	bne :+
+		jmp prepare_index_line_pair
+	:
+	txa
+	pha
+	; load first line
+	ldx #0
+	stx i
+	:
+		jsr huffmunch_read
+		cmp #0
+		beq :+
+		ldx i
+		sta nmi_buffer, X
+		inc i
+		jmp :-
+	:
+	lda #' '
+	ldx i
+	cpx #PAGE_W
+	beq :++
+	:
+		sta nmi_buffer, X
+		inx
+		cpx #PAGE_W
+		bcc :-
+	:
+	; the last pair ends with a page number instead
+	pla
+	cmp #12
+	bcc :+
+		jmp prepare_page_number
+	:
+	; load second line
+	ldx #0
+	stx i
+	:
+		jsr huffmunch_read
+		cmp #0
+		beq :+
+		ldx i
+		sta nmi_buffer+PAGE_W, X
+		inc i
+		jmp :-
+	:
+	lda #' '
+	ldx i
+	cpx #PAGE_W
+	beq :++
+	:
+		sta nmi_buffer+PAGE_W, X
+		inx
+		cpx #PAGE_W
+		bcc :-
+	:
+	rts
+.endproc
+
+.proc flip_draw_nmt
+	lda draw_nmt
+	eor #$08
+	sta draw_nmt
 	rts
 .endproc
 
@@ -242,31 +418,21 @@ skip:
 		brk ; error: too many pages
 	:
 	; prepare title page
+	lda #$20
+	sta draw_nmt
 	lda #0
-	sta j
+	sta k
 	sta page
-page_test_hack:
 	jsr prepare_story_page
-	lda #<$2042
-	sta nmi_addr+0
-	lda #>$2042
-	sta nmi_addr+1
 	:
-		jsr prepare_story_line
-		jsr draw_row
-		lda nmi_addr+0
-		clc
-		adc #<32
-		sta nmi_addr+0
-		lda nmi_addr+1
-		adc #>32
-		sta nmi_addr+1
-		inc j
-		lda j
-		cmp #PAGE_H
+		ldx k
+		jsr prepare_page_line_pair
+		jsr immediate_row2
+		inc k
+		lda k
+		cmp #13
 		bcc :-
-	jsr prepare_page_number_line
-	jsr draw_row
+	jsr flip_draw_nmt
 	; clear button presses
 	jsr poll_gamepads
 	; begin rendering
@@ -276,20 +442,156 @@ page_test_hack:
 	sta ppu_2000
 	sta $2000 ; commence NMI
 	jsr render_on
-loop:
-	; TODO
+	jmp reading_loop
+.endproc
+
+.proc reading_loop
 	jsr poll_gamepads
-	jsr render_on
-	; HACK
+	; button A cycles colour
 	lda gamepad_new
-	beq :+
+	and #PAD_A
+	beq a_end
+		ldx palette+1
+		inx
+		cpx #$0D
+		bcc :+
+			ldx #$01
+		:
+		stx palette+1
+		txa
+		ora #$10
+		sta palette+2
+	a_end:
+	; button B toggles music
+	lda gamepad_new
+	and #PAD_B
+	beq b_end
+		; TODO
+	b_end:
+	; button SELECT/START goes to index
+	lda gamepad_new
+	and #(PAD_SELECT | PAD_START)
+	beq index_end
+		lda page
+		sta page_index
+		lda #255
+		sta page
+		jsr page_retreat
+		jsr index_loop
+		jmp reading_loop
+	index_end:
+	; holding RIGHT/DOWN advances page
+	lda gamepad
+	and #(PAD_R | PAD_D)
+	beq advance_end
+		ldx page
+		inx
+		cpx page_count
+		bcs advance_end
 		inc page
-		lda #0
-		sta $2001
-		sta j
-		jmp page_test_hack
-	:
-	jmp loop
+		jsr page_advance
+		jmp reading_loop
+	advance_end:
+	; holding LEFT/UP retreats page
+	lda gamepad
+	and #(PAD_L | PAD_U)
+	beq retreat_end
+		ldx page
+		beq retreat_end
+		dec page
+		jsr page_retreat
+		jmp reading_loop
+	retreat_end:
+	jsr render_on
+	jmp reading_loop
+.endproc
+
+.proc page_advance
+	jsr prepare_story_page
+	ldx #0
+	@pair:
+		stx k
+		jsr prepare_page_line_pair
+		ldx k
+		lda scroll_advance, X
+		sta scroll_y
+		jsr render_row2
+		ldx k
+		inx
+		cpx #13
+		bcc @pair
+	@remain:
+		lda scroll_advance, X
+		sta scroll_y
+		jsr render_on
+		inx
+		cpx #14
+		bcc @remain
+	lda #0
+	sta scroll_y
+	lda ppu_2000
+	eor #%00000010 ; flip nametable vertically
+	sta ppu_2000
+	jsr flip_draw_nmt
+	jmp render_on
+scroll_advance:
+	; TODO maybe add some smoothness to this? make sure it doesn't run past visible change
+	.repeat 14, I
+		.byte (I+1) * 16
+	.endrepeat
+.endproc
+
+.proc page_retreat
+	jsr prepare_story_page
+	; first frame replaces page number (gives 8 more pixels of headroom at start)
+	jsr prepare_page_number_single
+	lda #<$0362
+	sta nmi_addr+0
+	lda #>$0362
+	clc
+	adc draw_nmt
+	sta nmi_addr+1
+	lda scroll_retreat+0
+	sta scroll_y
+	lda ppu_2000
+	eor #%00000010
+	sta ppu_2000
+	jsr render_row
+	ldx #1
+	@pair:
+		stx k
+		dex
+		jsr prepare_page_line_pair
+		ldx k
+		lda scroll_retreat, X
+		sta scroll_y
+		jsr render_row2
+		ldx k
+		inx
+		cpx #14
+		bcc @pair
+	@remain:
+		lda scroll_retreat, X
+		sta scroll_y
+		jsr render_on
+		inx
+		cpx #24
+		bcc @remain
+	jmp flip_draw_nmt
+scroll_retreat:
+	; first 14 frames careful not to go past visible change (24 pixels)
+	.repeat 14, I
+		.byte 240 - (I+1)
+	.endrepeat
+	; remaining frames can be as fast as desired
+	.repeat 10, I
+		.byte 216-(((I+1)*216)/10)
+	.endrepeat
+.endproc
+
+.proc index_loop
+	; TODO
+	rts
 .endproc
 
 ;
@@ -308,10 +610,10 @@ loop:
 .endenum
 
 .proc poll_gamepads
-	lda gamepad+0
-	sta gamepad_old+0
-	lda gamepad+1
-	sta gamepad_old+1
+	lda gamepads+0
+	sta gamepads_old+0
+	lda gamepads+1
+	sta gamepads_old+1
 	ldx #1
 	stx $4016
 	ldx #0
@@ -320,23 +622,26 @@ loop:
 		lda $4016
 		and #3
 		cmp #1
-		rol gamepad+0
+		rol gamepads+0
 		lda $4017
 		and #3
 		cmp #1
-		rol gamepad+1
+		rol gamepads+1
 		inx
 		cpx #8
 		bcc :-
-	lda gamepad+0
-	eor gamepad_old+0
-	and gamepad+0
+	lda gamepads+0
+	eor gamepads_old+0
+	and gamepads+0
 	sta gamepad_new
-	lda gamepad+1
-	eor gamepad_old+1
-	and gamepad+1
+	lda gamepads+1
+	eor gamepads_old+1
+	and gamepads+1
 	ora gamepad_new
 	sta gamepad_new
+	lda gamepads+0
+	ora gamepads+1
+	sta gamepad
 	rts
 .endproc
 
@@ -390,7 +695,7 @@ loop:
 	rts
 .endproc
 
-.proc draw_row
+.proc immediate_row
 	bit $2002
 	lda nmi_addr+1
 	sta $2006
@@ -399,6 +704,27 @@ loop:
 	ldx #0
 	:
 		lda nmi_buffer, X
+		sta $2007
+		inx
+		cpx #PAGE_W
+		bcc :-
+	rts
+.endproc
+
+.proc immediate_row2
+	jsr immediate_row
+	;bit $2002
+	lda nmi_addr+0
+	clc
+	adc #<32
+	tax
+	lda nmi_addr+1
+	adc #>32
+	sta $2006
+	stx $2006
+	ldx #0
+	:
+		lda nmi_buffer+PAGE_W, X
 		sta $2007
 		inx
 		cpx #PAGE_W
@@ -485,10 +811,10 @@ loop:
 	bcc finish
 		lda nmi_addr+0
 		clc
-		adc #32
+		adc #<32
 		tax
 		lda nmi_addr+1
-		adc #0
+		adc #>32
 		sta $2006
 		stx $2006
 		:
