@@ -5,31 +5,12 @@
 ; A demonstration of the Huffmmunch compression library,
 ; using The Most Dangerous Game by Richard Connell.
 
-; select/start go to index/options page (scroll up to it)
-; left/up go back one page
-; right/down go back one page
+; TODO
+; hunting knife icon for index
+; fill unused remaining space with music (use Lizard music library?)
 ; B stop/start music
-; A cycle colours
 ; on title: when leaving title page start music if not already started
 ; -- (first time only, otherwise if B has stopped it, it should not restart again)
-
-; back a page (or index) should scroll up
-; - update page row at bottom
-; - update 25 rows top to bottom
-; - (scroll as far as you can as early as you can)
-
-; forward (or leaving index) should scroll down
-; - update 25 rows top to bottom
-; - might be able to get a double with the page row
-; - (scroll as far as you can as early as you can)
-
-; finally:
-; fill unused remaining space with music
-; lizard music library?
-
-; CHR needs a little hunting knife (16x8, black outline, 2 palettes maybe?)
-; for a single sprite on the index page
-; set up aseprite and get lizard palette into it (and gimp)... make a png?
 
 PAGE_W = 28
 PAGE_H = 25
@@ -60,6 +41,8 @@ i:          .res 1 ; temporary counter
 j:          .res 1 ; temporary counter
 k:          .res 1 ; temporary counter
 draw_nmt:   .res 1 ; next nametable to draw ($20 or $24)
+knife_x:    .res 1 ; position of index knife
+knife_y:    .res 1 ; (y=0 for offscreen)
 
 ; huffmunch data
 .exportzp huffmunch_zpblock
@@ -400,9 +383,6 @@ number_position:
 		sta oam, X
 		inx
 		bne :-
-	ldx #255
-	ldy #240
-	jsr draw_knife
 	; get page count
 	jsr prepare_story_huffmunch
 	ldx #0
@@ -433,6 +413,8 @@ number_position:
 		cmp #13
 		bcc :-
 	jsr flip_draw_nmt
+	; pre-generate index knife sprite
+	jsr setup_knife
 	; clear button presses
 	jsr poll_gamepads
 	; begin rendering
@@ -441,39 +423,20 @@ number_position:
 	lda #%10000000
 	sta ppu_2000
 	sta $2000 ; commence NMI
-	jsr render_on
+	jsr srender_on
 	jmp reading_loop
 .endproc
 
 .proc reading_loop
 	jsr poll_gamepads
-	; button A cycles colour
-	lda gamepad_new
-	and #PAD_A
-	beq a_end
-		ldx palette+1
-		inx
-		cpx #$0D
-		bcc :+
-			ldx #$01
-		:
-		stx palette+1
-		txa
-		ora #$10
-		sta palette+2
-	a_end:
-	; button B toggles music
-	lda gamepad_new
-	and #PAD_B
-	beq b_end
-		; TODO
-	b_end:
+	jsr common_input ; A/B for colour/music
 	; button SELECT/START goes to index
 	lda gamepad_new
 	and #(PAD_SELECT | PAD_START)
 	beq index_end
 		lda page
 		sta page_index
+		jsr index_knife
 		lda #255
 		sta page
 		jsr page_retreat
@@ -502,7 +465,7 @@ number_position:
 		jsr page_retreat
 		jmp reading_loop
 	retreat_end:
-	jsr render_on
+	jsr srender_on
 	jmp reading_loop
 .endproc
 
@@ -515,7 +478,7 @@ number_position:
 		ldx k
 		lda scroll_advance, X
 		sta scroll_y
-		jsr render_row2
+		jsr srender_row2
 		ldx k
 		inx
 		cpx #13
@@ -523,22 +486,27 @@ number_position:
 	@remain:
 		lda scroll_advance, X
 		sta scroll_y
-		jsr render_on
+		jsr srender_on
 		inx
-		cpx #14
+		cpx #17
 		bcc @remain
 	lda #0
+	sta knife_y ; hide knife if coming back from index
 	sta scroll_y
 	lda ppu_2000
 	eor #%00000010 ; flip nametable vertically
 	sta ppu_2000
 	jsr flip_draw_nmt
-	jmp render_on
+	jmp srender_on
 scroll_advance:
-	; TODO maybe add some smoothness to this? make sure it doesn't run past visible change
-	.repeat 14, I
-		.byte (I+1) * 16
-	.endrepeat
+	.byte 1, 3, 6, 13, 26, 44, 71 ; smooth in
+	.byte 100, 129, 158, 187 ; 29 pixels/frame
+	.byte 208, 222, 229, 234, 237, 239 ; smooth out
+	; It takes 13 frames to update the nametables.
+	; Spreading the scroll over 17 frames with a few extra frames of acceleration/deceleration,
+	; always moving by odd numbers to avoid the strobe-grid experience of scrolling by tile increments.
+	; At frame 12 it catches up with 208. On frame 13 the update is finished,
+	; but we take a few more frames to slow down smoothly.
 .endproc
 
 .proc page_retreat
@@ -556,7 +524,7 @@ scroll_advance:
 	lda ppu_2000
 	eor #%00000010
 	sta ppu_2000
-	jsr render_row
+	jsr srender_row
 	ldx #1
 	@pair:
 		stx k
@@ -565,7 +533,7 @@ scroll_advance:
 		ldx k
 		lda scroll_retreat, X
 		sta scroll_y
-		jsr render_row2
+		jsr srender_row2
 		ldx k
 		inx
 		cpx #14
@@ -573,25 +541,103 @@ scroll_advance:
 	@remain:
 		lda scroll_retreat, X
 		sta scroll_y
-		jsr render_on
+		jsr srender_on
 		inx
-		cpx #24
+		cpx #25
 		bcc @remain
 	jmp flip_draw_nmt
 scroll_retreat:
-	; first 14 frames careful not to go past visible change (24 pixels)
-	.repeat 14, I
-		.byte 240 - (I+1)
-	.endrepeat
-	; remaining frames can be as fast as desired
-	.repeat 10, I
-		.byte 216-(((I+1)*216)/10)
-	.endrepeat
+	.byte 239, 239, 238, 238, 237, 236, 235, 234 ,232, 230, 227, 224, 220, 216 ; slow smooth in
+	.byte 187, 158, 129, 100, 71, 42, 13 ; 29 pixels/frame
+	.byte 6, 3, 1, 0 ; short smooth out
+	; On the first frame it updates just the line number to give extra headroom for scrolling up.
+	; Then it takes 13 frames to update the nametables top to bottom before we can scroll into it.
+	; The first 14 frames accelerate very slowly, taking up that headroom (up to 216),
+	; then the rest moves quickly.
+.endproc
+
+.proc common_input
+	; button A cycles colour
+	lda gamepad_new
+	and #PAD_A
+	beq a_end
+		ldx palette+1
+		inx
+		cpx #$0D
+		bcc :+
+			ldx #$01
+		:
+		stx palette+1
+		txa
+		ora #$10
+		sta palette+2
+	a_end:
+	; button B toggles music
+	lda gamepad_new
+	and #PAD_B
+	beq b_end
+		; TODO
+	b_end:
+	rts
 .endproc
 
 .proc index_loop
-	; TODO
-	rts
+	jsr poll_gamepads ; clear any held buttons
+loop:
+	jsr poll_gamepads
+	jsr common_input ; A/B for colour/music
+	; tap LEFT decreases page
+	lda gamepad_new
+	and #(PAD_L)
+	beq :+
+		lda page_index
+		beq :+
+		dec page_index
+	:
+	; tap RIGHT to increase page
+	lda gamepad_new
+	and #(PAD_R)
+	beq :+
+		ldx page_index
+		inx
+		cpx page_count
+		bcs :+
+		stx page_index
+	:
+	; tap UP to decrease page by 5
+	lda gamepad_new
+	and #(PAD_U)
+	beq :+
+		lda page_index
+		sec
+		sbc #5
+		bcc :+ ; alternatively could clamp to 0?
+		sta page_index
+	:
+	; tap DOWN to increase page by 5
+	lda gamepad_new
+	and #(PAD_D)
+	beq :+
+		lda page_index
+		clc
+		adc #5
+		cmp page_count
+		bcs :+ ; alternatively could clamp to page_count-1?
+		sta page_index
+	:
+	; tap SELECT/START to leave the index
+	lda gamepad_new
+	and #(PAD_SELECT | PAD_START)
+	beq :+
+		jmp exit
+	:
+	jsr index_knife
+	jsr srender_on
+	jmp loop
+exit:
+	lda page_index
+	sta page
+	jmp page_advance
 .endproc
 
 ;
@@ -690,11 +736,6 @@ scroll_retreat:
 	rts
 .endproc
 
-.proc draw_knife
-	; TODO
-	rts
-.endproc
-
 .proc immediate_row
 	bit $2002
 	lda nmi_addr+1
@@ -729,6 +770,105 @@ scroll_retreat:
 		inx
 		cpx #PAGE_W
 		bcc :-
+	rts
+.endproc
+
+; render calls + sprites
+
+.proc srender_on
+	jsr sprite_knife
+	jmp render_on
+.endproc
+
+.proc srender_row
+	jsr sprite_knife
+	jmp render_row
+.endproc
+
+.proc srender_row2
+	jsr sprite_knife
+	jmp render_row2
+.endproc
+
+.proc sprite_knife
+	lda knife_y
+	bne onscreen
+offscreen:
+	lda #255
+	sta oam+0
+	sta oam+4
+	sta oam+8
+	sta oam+12
+	rts
+onscreen:
+	sec
+	sbc scroll_y
+	bcc offscreen
+	; TODO knife metasprite
+	sta oam+0
+	sta oam+4
+	sta oam+8
+	sta oam+12
+	lda knife_x
+	sta oam+3
+	sta oam+11
+	clc
+	adc #8
+	sta oam+7
+	sta oam+15
+	rts
+.endproc
+
+.proc setup_knife
+	; pre-setup sprites and attributes
+	lda #$0E
+	sta oam+1
+	lda #$0F
+	sta oam+5
+	lda #$1E
+	sta oam+9
+	lda #$1F
+	sta oam+13
+	lda #$00
+	sta oam+2
+	sta oam+6
+	lda #$01
+	sta oam+10
+	sta oam+14
+	rts
+.endproc
+
+.proc index_knife
+	ldx #0
+	lda page_index
+	sec
+	:
+		sbc #5
+		bcc :+
+		inx
+		jmp :-
+	:
+	adc #5
+	; A = page_index % 5
+	; X = page_index / 5
+	sta i
+	asl
+	asl
+	clc
+	adc i
+	asl
+	asl
+	asl
+	clc
+	adc #32
+	sta knife_x
+	txa
+	asl
+	asl
+	asl
+	clc
+	adc #63
+	sta knife_y
 	rts
 .endproc
 
