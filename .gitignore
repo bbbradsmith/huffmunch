@@ -3,13 +3,14 @@ Debug/
 Release/
 *.user
 test/
-cmd.exe.lnk
+*.lnk
 /test.s
 danger/output/
 danger/cc65/
 danger/danger_build_notepad.bat
-danger/*.lnk
 /main.o
 /huffmunch.o
 /huffmunch
 /huffmunch.exe
+danger/music/FamiTracker.exe
+danger/music/*.pdf

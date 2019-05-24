@@ -15,6 +15,8 @@ PAGE_W = 28
 PAGE_H = 25
 PAGE_MAX = 100
 
+GREY_PROFILE = 0 ; simple performance profiling: greyscale while idle
+
 .segment "ZEROPAGE"
 
 ; rendering
@@ -44,10 +46,14 @@ draw_nmt:   .res 1 ; next nametable to draw ($20 or $24)
 knife_x:    .res 1 ; position of index knife
 knife_y:    .res 1 ; (y=0 for offscreen)
 index_hold: .res 1 ; frames of held button on index screen
+music_on:   .res 1
 
 ; huffmunch data
 .exportzp huffmunch_zpblock
 huffmunch_zpblock: .res 9
+.ifdef CANONICAL
+	.res 24-9 ; canonical requires more RAM
+.endif
 
 .segment "RAM"
 ; rendering
@@ -62,6 +68,8 @@ oam: .res 256
 
 .import huffmunch_load
 .import huffmunch_read
+
+.include "music/music.inc"
 
 ;
 ; utilities
@@ -363,6 +371,7 @@ number_position:
 ;
 
 .proc main
+	jsr music_init
 	; draw page frames
 	PPU_LATCH $2000
 	jsr draw_page
@@ -450,16 +459,20 @@ number_position:
 	bne :+
 	lda gamepad
 	and #PAD_D
-	beq :++
+	beq advance_end
 	:
 		ldx page
 		inx
 		cpx page_count
-		bcs :+
+		bcs advance_end
 		inc page
+		lda music_on ; when advancing to page 1 for the first time, turn on music (if not already toggled)
+		bne :+
+			jsr toggle_music
+		:
 		jsr page_advance
 		jmp reading_loop
-	:
+	advance_end:
 	; tapping left LEFT or holding UP retreats page
 	lda gamepad_new
 	and #PAD_L
@@ -479,6 +492,7 @@ number_position:
 .endproc
 
 .proc page_advance
+	PLAY_SOUND ::SOUND_PAGE
 	jsr prepare_story_page
 	ldx #0
 	@pair:
@@ -547,6 +561,7 @@ scroll_advance:
 		inx
 		cpx #14
 		bcc @pair
+	PLAY_SOUND ::SOUND_PAGE
 	@remain:
 		lda scroll_retreat, X
 		sta scroll_y
@@ -580,14 +595,33 @@ scroll_retreat:
 		txa
 		ora #$10
 		sta palette+2
+		PLAY_SOUND ::SOUND_SWITCH
 	:
 	; button B toggles music
 	lda gamepad_new
 	and #PAD_B
 	beq :+
-		; TODO
+		jsr toggle_music
 	:
 	rts
+.endproc
+
+.proc toggle_music
+	lda music_on
+	cmp #1
+	beq :+
+		lda #1
+		sta music_on
+		lda #::MUSIC_BUTTERFLY
+		sta player_next_music
+		rts
+	:
+		lda #2
+		sta music_on
+		lda #::MUSIC_SILENT
+		sta player_next_music
+		rts
+	;
 .endproc
 
 .proc index_loop
@@ -624,6 +658,7 @@ loop:
 		lda page_index
 		beq :+
 		dec page_index
+		PLAY_SOUND ::SOUND_SWITCH
 	:
 	; RIGHT to increase page
 	lda gamepad_new
@@ -634,6 +669,7 @@ loop:
 		cpx page_count
 		bcs :+
 		stx page_index
+		PLAY_SOUND ::SOUND_SWITCH
 	:
 	; UP to decrease page by 5
 	lda gamepad_new
@@ -644,6 +680,7 @@ loop:
 		sbc #5
 		bcc :+ ; alternatively could clamp to 0?
 		sta page_index
+		PLAY_SOUND ::SOUND_SWITCH
 	:
 	; DOWN to increase page by 5
 	lda gamepad_new
@@ -655,6 +692,7 @@ loop:
 		cmp page_count
 		bcs :+ ; alternatively could clamp to page_count-1?
 		sta page_index
+		PLAY_SOUND ::SOUND_SWITCH
 	:
 	; SELECT/START to leave the index
 	lda gamepad_new
@@ -920,6 +958,13 @@ onscreen:
 .endproc
 
 .proc render_wait
+	.if ::GREY_PROFILE
+		pha
+		lda ppu_2001
+		ora #%00000001
+		sta $2001
+		pla
+	.endif
 	sta nmi_mode
 	:
 		lda nmi_mode
@@ -996,6 +1041,7 @@ finish:
 	lda #0
 	sta nmi_mode
 skip:
+	jsr music_tick
 	pla
 	tay
 	pla
