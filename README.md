@@ -53,7 +53,7 @@ There are two versions of the decompression library:
 * **huffmunch.s** - standard version
 * **huffmunch_canonical.s** - canonical version (much slower, slightly better compression)
 
-See the __danger\__ folder for an example NES project.
+See the **danger** folder for an example NES project.
 
 ## Method
 
@@ -71,7 +71,7 @@ Goals:
 At a high level, DEFLATE uses two major compression techniques in tandem:
 * An [LZ algorithm](https://en.wikipedia.org/wiki/LZ77_and_LZ78)
   builds a dictionary of commonly repeated substrings of symbols as the data is decompressed,
-  and allows further repetitions of these dictionary entries to be replaced by a much smaller reference.
+  and allows further repetitions of these dictionary entries to be replaced by a much smaller reference symbol.
 * A [Huffman tree](https://en.wikipedia.org/wiki/Huffman_coding)
   uses distribution of symbol frequency to find an optimal way to store
   the stream of symbols and references.

@@ -7,7 +7,7 @@ It's rather a mystery--"
 
 "What island is it?" Rainsford asked.
 
-"The old charts call it `Ship-Trap Island,"' Whitney replied." A
+"The old charts call it `Ship-Trap Island'," Whitney replied." A
 suggestive name, isn't it? Sailors have a curious dread of the place. I
 don't know why. Some superstition--"
 
@@ -46,7 +46,7 @@ passed that island yet?"
 
 "I can't tell in the dark. I hope so."
 
-"Why? " asked Rainsford.
+"Why?" asked Rainsford.
 
 "The place has a reputation--a bad one."
 
@@ -286,7 +286,7 @@ At the great table the general was sitting, alone.
 surpassingly good; and, Rainsford noted, the table apointments were of
 the finest--the linen, the crystal, the silver, the china.
 
-They were eating /borsch/, the rich, red soup with whipped cream so dear
+They were eating `borsch', the rich, red soup with whipped cream so dear
 to Russian palates. Half apologetically General Zaroff said, "We do our
 best to preserve the amenities of civilization here. Please forgive any
 lapses. We are well off the beaten track, you know. Do you think the
@@ -294,7 +294,7 @@ champagne has suffered from its long ocean trip?"
 
 "Not in the least," declared Rainsford. He was finding the general a
 most thoughtful and affable host, a true cosmopolite. But there was one
-small trait of .the general's that made Rainsford uncomfortable.
+small trait of the general's that made Rainsford uncomfortable.
 Whenever he looked up from his plate he found the general studying him,
 appraising him narrowly.
 
@@ -314,7 +314,7 @@ largest I ever saw."
 "Hurled me against a tree," said the general. "Fractured my skull. But I
 got the brute."
 
-"I've always thought," said Rains{ord, "that the Cape buffalo is the
+"I've always thought," said Rainsford, "that the Cape buffalo is the
 most dangerous of all big game."
 
 For a moment the general did not reply; he was smiling his curious
@@ -372,7 +372,7 @@ The general puffed at his cigarette.
 for an officer of the Czar to stay there. Many noble Russians lost
 everything. I, luckily, had invested heavily in American securities, so
 I shall never have to open a tearoom in Monte Carlo or drive a taxi in
-Paris. Naturally, I continued to hunt--grizzliest in your Rockies,
+Paris. Naturally, I continued to hunt--grizzlies in your Rockies,
 crocodiles in the Ganges, rhinoceroses in East Africa. It was in Africa
 that the Cape buffalo hit me and laid me up for six months. As soon as I
 recovered I started for the Amazon to hunt jaguars, for I had heard they
@@ -438,7 +438,7 @@ Rainsford's bewilderment showed in his face.
 "I wanted the ideal animal to hunt," explained the general. "So I said,
 `What are the attributes of an ideal quarry?' And the answer was, of
 course, `It must have courage, cunning, and, above all, it must be able
-to reason."'
+to reason.'"
 
 "But no animal can reason," objected Rainsford.
 
@@ -564,7 +564,7 @@ greenly.
 "A rather good lot, I think," observed the general. "They are let out at
 seven every night. If anyone should try to get into my house--or out of
 it--something extremely regrettable would occur to him." He hummed a
-snatch of song from the /Folies Bergere/.
+snatch of song from the `Folies Bergere'.
 
 "And now," said the general, "I want to show you my new collection of
 heads. Will you come with me to the library?"
@@ -641,17 +641,17 @@ thick arms crossed on his hogshead of chest.
 
 "My dear fellow," said the general, "have I not told you I always mean
 what I say about hunting? This is really an inspiration. I drink to a
-foeman worthy of my steel - at last." The general raised his glass, but
+foeman worthy of my steel at last." The general raised his glass, but
 Rainsford sat staring at him.
 
 "You'll find this game worth playing," the general said
-enthusiastically." Your brain against mine. Your woodcraft against mine.
+enthusiastically. "Your brain against mine. Your woodcraft against mine.
 Your strength and stamina against mine. Outdoor chess! And the stake is
 not without value, eh?"
 
 "And if I win--" began Rainsford huskily.
 
-"I'll cheerfully acknowledge myself defeat if I do not find you by
+"I'll cheerfully acknowledge my defeat if I do not find you by
 midnight of the third day," said General Zaroff. "My sloop will place
 you on the mainland near a town." The general read what Rainsford was
 thinking.
@@ -662,7 +662,7 @@ nothing of your visit here."
 
 "I'll agree to nothing of the kind," said Rainsford.
 
-"Oh," said the general, "in that case... But why discuss that now? Three
+"Oh," said the general, "in that case... but why discuss that now? Three
 days hence we can discuss it over a bottle of Veuve Cliquot, unless..."
 
 The general sipped his wine.
@@ -685,13 +685,15 @@ clothes, a haversack of food, a leather sheath containing a long-bladed
 hunting knife; his right hand rested on a cocked revolver thrust in the
 crimson sash about his waist.
 
+¶
+
 Rainsford had fought his way through the bush for two hours. "I must
 keep my nerve. I must keep my nerve," he said through tight teeth.
 
 He had not been entirely clearheaded when the chateau gates snapped shut
 behind him. His whole idea at first was to put distance between himself
 and General Zaroff; and, to this end, he had plunged along, spurred on
-by the sharp rowers of something very like panic. Now he had got a grip
+by the sharp rowels of something very like panic. Now he had got a grip
 on himself, had stopped, and was taking stock of himself and the
 situation. He saw that straight flight was futile; inevitably it would
 bring him face to face with the sea. He was in a picture with a frame of
@@ -882,17 +884,19 @@ between the trees dead ahead. Ever nearer drew the hounds. Rainsford
 forced himself on toward that gap. He reached it. It was the shore of
 the sea. Across a cove he could see the gloomy gray stone of the
 chateau. Twenty feet below him the sea rumbled and hissed. Rainsford
-hesitated. He heard the hounds. Then he leaped far out into the sea. . . .
+hesitated. He heard the hounds. Then he leaped far out into the sea.
+
+¶
 
 When the general and his pack reached the place by the sea, the Cossack
 stopped. For some minutes he stood regarding the blue-green expanse of
-water. He shrugged his shoulders. Then be sat down, took a drink of
+water. He shrugged his shoulders. Then he sat down, took a drink of
 brandy from a silver flask, lit a cigarette, and hummed a bit from
-/Madame Butterfly/.
+`Madame Butterfly'.
 
 General Zaroff had an exceedingly good dinner in his great paneled
-dining hall that evening. With it he had a bottle of /Pol Roger/ and
-half a bottle of /Chambertin/. Two slight annoyances kept him from
+dining hall that evening. With it he had a bottle of `Pol Roger' and
+half a bottle of `Chambertin'. Two slight annoyances kept him from
 perfect enjoyment. One was the thought that it would be difficult to
 replace Ivan; the other was that his quarry had escaped him; of course,
 the American hadn't played the game--so thought the general as he tasted
@@ -919,7 +923,8 @@ hoarse voice. "Get ready, General Zaroff."
 
 The general made one of his deepest bows. "I see," he said. "Splendid!
 One of us is to furnish a repast for the hounds. The other will sleep in
-this very excellent bed. On guard, Rainsford." . . .
+this very excellent bed. On guard, Rainsford."
+
+¶
 
 He had never slept in a better bed, Rainsford decided. 
-

@@ -56,7 +56,7 @@ appendix = [
     ]
 
 paragraphs = []
-for line in open("danger.txt","rt").readlines()[3:-1]:
+for line in open("danger.txt","rt").readlines()[3:]:
     l = line.rstrip();
     if l == "":
         paragraphs.append([])
@@ -110,6 +110,8 @@ for p in pages:
             c = 0
         elif c == "ê":
             c = ord('e') # de-ornament crêpes suzette
+        elif c == "¶":
+            c = ord(' ') # hide a paragraph break
         else:
             c = ord(c)
         b.append(c)
