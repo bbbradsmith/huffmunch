@@ -6,7 +6,6 @@
 ; using The Most Dangerous Game by Richard Connell.
 
 ; TODO
-; hunting knife icon for index
 ; fill unused remaining space with music (use Lizard music library?)
 ; B stop/start music
 ; on title: when leaving title page start music if not already started
@@ -31,6 +30,7 @@ gamepads_old: .res 2
 gamepads:     .res 2
 gamepad_new:  .res 1 ; buttons pressed since last poll
 gamepad:      .res 1 ; OR of both gamepads
+gamepad_old:  .res 1 ; previous value of gamepad
 
 ; selection
 page:       .res 1
@@ -43,6 +43,7 @@ k:          .res 1 ; temporary counter
 draw_nmt:   .res 1 ; next nametable to draw ($20 or $24)
 knife_x:    .res 1 ; position of index knife
 knife_y:    .res 1 ; (y=0 for offscreen)
+index_hold: .res 1 ; frames of held button on index screen
 
 ; huffmunch data
 .exportzp huffmunch_zpblock
@@ -433,7 +434,7 @@ number_position:
 	; button SELECT/START goes to index
 	lda gamepad_new
 	and #(PAD_SELECT | PAD_START)
-	beq index_end
+	beq :+
 		lda page
 		sta page_index
 		jsr index_knife
@@ -442,29 +443,37 @@ number_position:
 		jsr page_retreat
 		jsr index_loop
 		jmp reading_loop
-	index_end:
-	; holding RIGHT/DOWN advances page
+	:
+	; tapping RIGHT or holding DOWN advances page
+	lda gamepad_new
+	and #PAD_R
+	bne :+
 	lda gamepad
-	and #(PAD_R | PAD_D)
-	beq advance_end
+	and #PAD_D
+	beq :++
+	:
 		ldx page
 		inx
 		cpx page_count
-		bcs advance_end
+		bcs :+
 		inc page
 		jsr page_advance
 		jmp reading_loop
-	advance_end:
-	; holding LEFT/UP retreats page
+	:
+	; tapping left LEFT or holding UP retreats page
+	lda gamepad_new
+	and #PAD_L
+	bne :+
 	lda gamepad
-	and #(PAD_L | PAD_U)
-	beq retreat_end
+	and #PAD_U
+	beq :++
+	:
 		ldx page
-		beq retreat_end
+		beq :+
 		dec page
 		jsr page_retreat
 		jmp reading_loop
-	retreat_end:
+	:
 	jsr srender_on
 	jmp reading_loop
 .endproc
@@ -560,7 +569,7 @@ scroll_retreat:
 	; button A cycles colour
 	lda gamepad_new
 	and #PAD_A
-	beq a_end
+	beq :++
 		ldx palette+1
 		inx
 		cpx #$0D
@@ -571,22 +580,44 @@ scroll_retreat:
 		txa
 		ora #$10
 		sta palette+2
-	a_end:
+	:
 	; button B toggles music
 	lda gamepad_new
 	and #PAD_B
-	beq b_end
+	beq :+
 		; TODO
-	b_end:
+	:
 	rts
 .endproc
 
 .proc index_loop
+	INDEX_HOLD = 35 ; this many frames before auto-repeat triggers
+	INDEX_REPEAT = 5 ; frames between auto-repeat
 	jsr poll_gamepads ; clear any held buttons
 loop:
 	jsr poll_gamepads
+	; typematic repeat counter
+	lda gamepad
+	cmp gamepad_old
+	bne :+
+		inc index_hold
+		lda index_hold
+		cmp #INDEX_HOLD
+		bcc :++
+		sec
+		sbc #INDEX_REPEAT
+		sta index_hold
+		lda gamepad
+		and #(PAD_L | PAD_R | PAD_U | PAD_D)
+		ora gamepad_new
+		sta gamepad_new ; re-press direction buttons
+		jmp :++
+	:
+		lda #0
+		sta index_hold
+	:
 	jsr common_input ; A/B for colour/music
-	; tap LEFT decreases page
+	; LEFT decreases page
 	lda gamepad_new
 	and #(PAD_L)
 	beq :+
@@ -594,7 +625,7 @@ loop:
 		beq :+
 		dec page_index
 	:
-	; tap RIGHT to increase page
+	; RIGHT to increase page
 	lda gamepad_new
 	and #(PAD_R)
 	beq :+
@@ -604,7 +635,7 @@ loop:
 		bcs :+
 		stx page_index
 	:
-	; tap UP to decrease page by 5
+	; UP to decrease page by 5
 	lda gamepad_new
 	and #(PAD_U)
 	beq :+
@@ -614,7 +645,7 @@ loop:
 		bcc :+ ; alternatively could clamp to 0?
 		sta page_index
 	:
-	; tap DOWN to increase page by 5
+	; DOWN to increase page by 5
 	lda gamepad_new
 	and #(PAD_D)
 	beq :+
@@ -625,7 +656,7 @@ loop:
 		bcs :+ ; alternatively could clamp to page_count-1?
 		sta page_index
 	:
-	; tap SELECT/START to leave the index
+	; SELECT/START to leave the index
 	lda gamepad_new
 	and #(PAD_SELECT | PAD_START)
 	beq :+
@@ -660,6 +691,8 @@ exit:
 	sta gamepads_old+0
 	lda gamepads+1
 	sta gamepads_old+1
+	lda gamepad
+	sta gamepad_old
 	ldx #1
 	stx $4016
 	ldx #0
@@ -676,6 +709,7 @@ exit:
 		inx
 		cpx #8
 		bcc :-
+	; onset from either controller goes into gamepad_new
 	lda gamepads+0
 	eor gamepads_old+0
 	and gamepads+0
@@ -685,6 +719,7 @@ exit:
 	and gamepads+1
 	ora gamepad_new
 	sta gamepad_new
+	; both controllers combine into gamepad
 	lda gamepads+0
 	ora gamepads+1
 	sta gamepad
@@ -797,25 +832,18 @@ offscreen:
 	lda #255
 	sta oam+0
 	sta oam+4
-	sta oam+8
-	sta oam+12
 	rts
 onscreen:
 	sec
 	sbc scroll_y
 	bcc offscreen
-	; TODO knife metasprite
 	sta oam+0
 	sta oam+4
-	sta oam+8
-	sta oam+12
 	lda knife_x
 	sta oam+3
-	sta oam+11
 	clc
 	adc #8
 	sta oam+7
-	sta oam+15
 	rts
 .endproc
 
@@ -825,16 +853,9 @@ onscreen:
 	sta oam+1
 	lda #$0F
 	sta oam+5
-	lda #$1E
-	sta oam+9
-	lda #$1F
-	sta oam+13
 	lda #$00
 	sta oam+2
 	sta oam+6
-	lda #$01
-	sta oam+10
-	sta oam+14
 	rts
 .endproc
 
@@ -867,7 +888,7 @@ onscreen:
 	asl
 	asl
 	clc
-	adc #63
+	adc #62
 	sta knife_y
 	rts
 .endproc
@@ -1056,7 +1077,7 @@ palette_data:
 	.byte $0F, $09, $19, $30
 	.byte $0F, $0C, $1C, $30
 	.byte $0F, $03, $13, $30
-	.byte $0F, $08, $18, $30
+	.byte $0F, $0F, $00, $10
 	.byte $0F, $0B, $1B, $30
 	.byte $0F, $02, $12, $30
 	.byte $0F, $05, $15, $30
