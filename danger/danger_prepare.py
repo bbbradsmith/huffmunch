@@ -42,6 +42,14 @@ title = ([""]*TT) + title_text + ([""]*TB)
 
 appendix = [
     #---------------------------
+    "`Un bel di vedremo'",
+    "from `Madama Butterfly'",
+    "Giacomo Puccini, 1904.",
+    "Arranged for NES by",
+    "Brad Smith, 2019.",
+    "",
+    "",
+    "",
     "This was a demonstration of",
     "the huffmunch compression",
     "tool for NES, written by",

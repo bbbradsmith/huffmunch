@@ -14,3 +14,4 @@ danger/danger_build_notepad.bat
 /huffmunch.exe
 danger/music/FamiTracker.exe
 danger/music/*.pdf
+danger/music/*.mp3
