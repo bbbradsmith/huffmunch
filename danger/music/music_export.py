@@ -335,7 +335,7 @@ def pack_ftm(ftm):
     for i in range(0,len(ftm.instrument)):
         m = list(ftm.instrument[i]) # copy the instrument
         for t in range(0,5):
-            if m[t] == -1:
+            if m[t] == -1 or m[t] >= len(macro_map[t]):
                 if t == 0:
                     m[t] = 1 # volume macro -1
                 else:
