@@ -19,9 +19,9 @@ huffmunch_zpblock: .res 9
 
 story:
 	.ifndef CANONICAL
-		.incbin "output/danger0000.hfb"
+		.incbin "../output/danger0000.hfb"
 	.else
-		.incbin "output/danger0000.hfc"
+		.incbin "../output/danger0000.hfc"
 	.endif
 
 .segment "CODE"
@@ -36,7 +36,7 @@ _test_init:
 	jsr huffmunch_load
 	ldx huffmunch_zpblock+1
 	lda huffmunch_zpblock+0
-	rts
+	rts ; X:A = block count
 
 _test_begin_block: ; X:A = block
 	ldy #<story

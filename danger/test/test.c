@@ -6,7 +6,7 @@ extern unsigned int fastcall test_init(void);
 extern unsigned int fastcall test_begin_block(unsigned int index);
 extern unsigned int fastcall test_read_byte(void);
 
-#define STORY_FILE "output/danger.bin"
+#define STORY_FILE "../output/danger.bin"
 
 int main()
 {
@@ -30,7 +30,7 @@ int main()
 
 	for (block=0; block<block_count; ++block)
 	{
-		printf("Block %u...",b);
+		printf("Block %u...", block);
 		block_length = test_begin_block(block);
 		for (b=0; b<block_length; ++b)
 		{
