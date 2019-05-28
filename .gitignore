@@ -2,7 +2,7 @@
 Debug/
 Release/
 *.user
-test/
+/test/
 *.lnk
 /test.s
 danger/output/

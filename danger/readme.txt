@@ -65,11 +65,8 @@ output\
 	huffmunch decompressor for 6502
 ..\release\huffmunch.exe
 	huffmunch compressor
-test.c
-test.s
-test.cfg
-test.bat
-	tests the huffmunch 6502 implementation against the compressed data
+test\
+	verifies the huffmunch 6502 implementation against the compressed data
 readme.txt
 	you are reading this
 
