@@ -11,6 +11,8 @@
 ; on title: when leaving title page start music if not already started
 ; -- (first time only, otherwise if B has stopped it, it should not restart again)
 
+.macpack longbranch
+
 PAGE_W = 28
 PAGE_H = 25
 PAGE_MAX = 100
@@ -20,12 +22,14 @@ GREY_PROFILE = 0 ; simple performance profiling: greyscale while idle
 .segment "ZEROPAGE"
 
 ; rendering
-nmi_mode: .res 1
-nmi_addr: .res 2
-scroll_x: .res 1
-scroll_y: .res 1
-ppu_2000: .res 1
-ppu_2001: .res 1
+nmi_on:    .res 1 ; if 0 NMI does nothing but increment nmi_count
+nmi_count: .res 1 ; increments every NMI
+nmi_mode:  .res 1 ; controls PPU updates during NMI (0 for none, returned to 0 after NMI)
+nmi_addr:  .res 2 ; address of PPU update (see nmi_buffer)
+scroll_x:  .res 1
+scroll_y:  .res 1
+ppu_2000:  .res 1
+ppu_2001:  .res 1
 
 ; gamepad
 gamepads_old: .res 2
@@ -371,7 +375,6 @@ number_position:
 ;
 
 .proc main
-	jsr music_init
 	; draw page frames
 	PPU_LATCH $2000
 	jsr draw_page
@@ -433,9 +436,53 @@ number_position:
 	lda #%10000000
 	sta ppu_2000
 	sta $2000 ; commence NMI
+	; detect region
+	jsr cpu_speed_detect
+	sta player_pal
+	jsr music_init
+	; allow NMI
+	lda #1
+	sta nmi_on
 	jsr srender_on
 	jmp reading_loop
 .endproc
+
+.pushseg
+.segment "ALIGN"
+.align 32
+; counts CPU cycles in between 2 NMIs to determin regional timing
+; returns in A:
+;   0 NTSC  (60Hz, 1.79MHz)
+;   1 PAL   (50Hz, 1.66MHz)
+;   2 Dendy (50Hz, 1.77MHz)
+.proc cpu_speed_detect
+	; count CPU cycles in between 2 NMIs
+	ldx #0
+	ldy #0
+	lda nmi_count
+	:
+		cmp nmi_count
+		beq :-
+	lda nmi_count
+	:
+		inx
+		bne :+
+		.assert >:+=>*, error, "branch crosses page boundary"
+			iny
+		:
+		cmp nmi_count
+		beq :--
+		.assert >:--=>*, error, "branch crosses page boundary"
+	; Y:X result
+	; NTSC  0A:8D
+	; PAL   0B:C8
+	; Dendy 0C:92
+	tya
+	sec
+	sbc #$0A
+	rts
+.endproc
+.popseg
 
 .proc reading_loop
 	jsr poll_gamepads
@@ -978,8 +1025,11 @@ onscreen:
 	pha
 	tya
 	pha
+	inc nmi_count
+	lda nmi_on
+	jeq skip_all
 	lda nmi_mode
-	beq skip
+	beq skip_ppu
 	; OAM DMA
 	lda #0
 	sta $2003
@@ -1040,8 +1090,9 @@ finish:
 	sta $2005
 	lda #0
 	sta nmi_mode
-skip:
+skip_ppu:
 	jsr music_tick
+skip_all:
 	pla
 	tay
 	pla
