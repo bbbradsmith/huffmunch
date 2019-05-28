@@ -118,9 +118,9 @@ hm_s       = <(huffmunch_zpblock + 22) ; current string reached (16-bit)
 	sta hm_node+0
 	pla
 	sta hm_node+1
-	tya
-	pha
 	txa
+	pha
+	tya
 	pha ; stack = stream length 1, 0
 	; 10. find string table: hm_strings [ready], ++hm_tree [ready]
 	ldy #0
