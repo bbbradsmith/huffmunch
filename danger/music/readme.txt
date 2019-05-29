@@ -77,3 +77,5 @@ Notes:
 ~1830 cycles per most frames
 ~2500 cycles peak
 ~4000 cycles if a new music is loaded
+
+(Optionally could place all variables on ZP, saves about 300 bytes of code and ~100 cycles per frame.)
