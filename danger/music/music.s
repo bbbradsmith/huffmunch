@@ -12,22 +12,34 @@
 .export music_tick
 .export music_init
 
-.exportzp player_pal
+.export player_pal
 .exportzp player_next_sound
 .exportzp player_next_music
 .exportzp player_pause
-.exportzp player_current_music
+.export player_current_music
 
 .include "../output/data_music.inc"
 
 .segment "ZEROPAGE"
 
-temp_ptrn:             .res 2
+temp_ptrn:             .res 2 ; not required to persist outside of music_init/music_tick
 
-player_pal:            .res 1
+; zero-page for convenience
 player_next_sound:     .res 2
 player_next_music:     .res 1
 player_pause:          .res 1
+; zero-page for indirection
+pointer_pattern_table: .res 2
+pointer_order:         .res 2
+pointer_pattern:       .res 8
+pointer_sfx_pattern:   .res 4
+
+.segment "RAM"
+
+player_pal:            .res 1
+;player_next_sound:     .res 2
+;player_next_music:     .res 1
+;player_pause:          .res 1
 player_current_music:  .res 1
 
 player_speed:          .res 1
@@ -54,11 +66,11 @@ player_freq_out_high:  .res 4
 player_duty_out:       .res 4
 player_apu_high:       .res 4
 
-pointer_pattern_table: .res 2
-pointer_order:         .res 2
-pointer_pattern:       .res 8
+;pointer_pattern_table: .res 2
+;pointer_order:         .res 2
+;pointer_pattern:       .res 8
 pointer_macro:         .res 32
-pointer_sfx_pattern:   .res 4
+;pointer_sfx_pattern:   .res 4
 
 .segment "CODE"
 
@@ -170,7 +182,8 @@ music_tick:
 					tay
 					pla
 					tax
-					sty player_row_skip, X
+					tya
+					sta player_row_skip, X
 					jmp @next_channel
 				:
 				; if A == 0x80 halt and end row
@@ -190,7 +203,8 @@ music_tick:
 					tay ; Y = note (A - 0x81)
 					pla
 					tax
-					sty player_note, X
+					tya
+					sta player_note, X
 					lda #0
 					sta player_halt, X
 					sta player_pitch_low, X
@@ -209,7 +223,9 @@ music_tick:
 					tay
 					pla
 					tax
-					sty player_vol, X
+					tya
+					sta player_vol, X
+					txa
 					pha ; put X back on stack for next loop
 					asl
 					tax ; put X*2 back
@@ -505,7 +521,7 @@ music_tick:
 	;
 	; channel 0 square 1
 	lda player_sfx_on+0
-	bne @channel_0_sfx_override
+	jne @channel_0_sfx_override
 		; volume
 		lda player_halt+0
 		bne :+
@@ -882,17 +898,21 @@ tick_macro:
 	sta temp_ptrn+1
 	pla
 	tax
-	ldy player_macro_pos, X
+	lda player_macro_pos, X
+	tay
 	@macro_loop:
 		lda (temp_ptrn), Y
 		iny
-		sty player_macro_pos, X
 		cmp #<LOOP
 		bne :+
 			lda (temp_ptrn), Y
 			tay
 			jmp @macro_loop
 		:
+		pha
+		tya
+		sta player_macro_pos, X
+		pla
 	rts
 
 load_music:
@@ -957,7 +977,9 @@ load_music:
 	ldx #0
 	:
 		sta pointer_macro+0, x
-		sty pointer_macro+1, x
+		tya
+		sta pointer_macro+1, x
+		lda data_music_macro_low
 		inx
 		inx
 		cpx #32

@@ -71,7 +71,9 @@ Write 1 to player_pause to temporarily pause music. 0 to resume.
 
 Notes:
 
-Uses about 1.3kb of base code.
-
-Reserves quite a bit of RAM in the ZEROPAGE segment.
-It would probably be helpful to move many of them to a BSS page.
+2152 bytes of code and note/volume tables
+22 bytes of zeropage
+105 bytes of other RAM
+~1830 cycles per most frames
+~2500 cycles peak
+~4000 cycles if a new music is loaded

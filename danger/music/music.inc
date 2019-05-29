@@ -10,10 +10,11 @@
 .import music_init
 .import music_tick
 
-.importzp player_pal
+.import player_pal
 .importzp player_pause
 .importzp player_next_music
 .importzp player_next_sound
+.import player_current_music
 
 .include "../output/data_music_enums.inc"
 
