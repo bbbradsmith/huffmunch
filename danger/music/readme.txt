@@ -48,6 +48,10 @@ A playing sound effect will cancel any current music note on the same channel,
 and play instead of music for its duration of effect.
 The music will resume on that channel at the next note.
 
+This default behaviour can be changed by assembling music.s with: -D SFX_NO_HALT
+The no-halt version instead will not cancel any playing note on the channel,
+and immediately returns to the in-progress note whenever the sound effect finishes.
+
 
 To use the music engine:
 

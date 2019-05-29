@@ -16,7 +16,7 @@ cc65\bin\ca65 -o output\danger.o -g danger.s
 cc65\bin\ca65 -o output\danger_canonical.o -D CANONICAL -g danger.s
 @IF ERRORLEVEL 1 GOTO error
 
-cc65\bin\ca65 -o output\music.o -g music\music.s
+cc65\bin\ca65 -o output\music.o -D SFX_NO_HALT -g music\music.s
 @IF ERRORLEVEL 1 GOTO error
 
 cc65\bin\ld65 -o output\danger.nes -m output\danger.map --dbgfile output\danger.dbg -C danger.cfg output\danger.o output\huffmunch.o output\music.o

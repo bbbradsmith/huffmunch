@@ -434,8 +434,10 @@ music_tick:
 			bne :+
 				lda #0
 				sta player_sfx_on+0
+				.ifndef SFX_NO_HALT
 				lda #1
 				sta player_halt+0
+				.endif
 				jmp @sfx0_done
 			:
 			; A >= 0x81
@@ -488,8 +490,10 @@ music_tick:
 			bne :+
 				lda #0
 				sta player_sfx_on+1
+				.ifndef SFX_NO_HALT
 				lda #1
 				sta player_halt+3
+				.endif
 				jmp @sfx1_done
 			:
 			; A >= 0x81
