@@ -67,6 +67,7 @@ output\
 	huffmunch compressor
 test\
 	verifies the huffmunch 6502 implementation against the compressed data
+	(test requires cc65 version 2.18)
 readme.txt
 	you are reading this
 

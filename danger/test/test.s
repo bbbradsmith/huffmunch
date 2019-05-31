@@ -7,7 +7,7 @@
 .import huffmunch_load
 .import huffmunch_read
 
-.segment "ZEROASM" : zeropage
+.segment "ZEROPAGE"
 
 .exportzp huffmunch_zpblock
 huffmunch_zpblock: .res 9
