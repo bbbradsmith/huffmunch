@@ -747,6 +747,12 @@ loop:
 exit:
 	lda page_index
 	sta page
+	; if advancing to page 1+ for the first time, turn on music (if not already toggled)
+	beq :+
+	lda music_on
+	bne :+
+		jsr toggle_music
+	:
 	jmp page_advance
 .endproc
 

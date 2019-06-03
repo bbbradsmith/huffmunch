@@ -2,8 +2,6 @@
 
 A practical generic compression library for the NES or other 6502 platforms.
 
-**This is currently under construction, not yet ready for use.**
-
 ## Usage
 
 ### Compression
@@ -26,7 +24,7 @@ basic usage:
 More detailed usage information can be found by running the utility with no arguments.
 
 C++ source code for the command line utility is included, and is not platform specific.
- The compression library itself is kept separately, and could be integrated into other tools.
+ The compression library itself is separated, and could be integrated into other tools.
 
 * **main.cpp** - command line utility
 * **huffmunch.cpp** - compression library

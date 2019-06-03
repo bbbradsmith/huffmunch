@@ -31,9 +31,9 @@ Build from source:
 1. Create an output/ folder.
 2. Place FamiTracker.exe in the music/ folder.
 3. Run music/music_export.py to build the music data.
-4. Run danger_prepare.py to prepare the story text for compression.
-5. Run danger_compress.py to compress the story text.
-6. Run danger_build to build the NES ROM.
+4. Run danger_prepare.py to collect the story text into pages.
+5. Run danger_compress.bat to compress the story pages.
+6. Run danger_build.bat to build the NES ROM.
 7. See output/danger.nes
 
 
@@ -72,4 +72,9 @@ readme.txt
 	you are reading this
 
 
-This demonstration is not yet finished. Please check back later.
+License:
+
+This demonstration is released under the Creative Commons Attribution License (CC BY 4.0)
+
+If you'd like to support this project or its author, please visit:
+https://www.patreon.com/rainwarrior
