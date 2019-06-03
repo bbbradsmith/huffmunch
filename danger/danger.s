@@ -5,12 +5,6 @@
 ; A demonstration of the Huffmmunch compression library,
 ; using The Most Dangerous Game by Richard Connell.
 
-; TODO
-; fill unused remaining space with music (use Lizard music library?)
-; B stop/start music
-; on title: when leaving title page start music if not already started
-; -- (first time only, otherwise if B has stopped it, it should not restart again)
-
 .macpack longbranch
 
 PAGE_W = 28
