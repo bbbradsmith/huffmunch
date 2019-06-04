@@ -198,14 +198,10 @@ uint read_intx(uint pos, const vector<u8>& packed, uint& out)
 }
 
 // for packing unsigned integers of header_width into the header
-bool pack_header(uint v, uint index, vector<u8>& header)
+// pack_header for unsigned char* (unsafe)
+bool pack_header(uint v, uint index, unsigned char* header)
 {
 	uint ix = index * header_width;
-	if ((ix + header_width) > header.size())
-	{
-		DEBUG_OUT(DBI,"no room for header?\n");
-		return false;
-	}
 	uint vs = v;
 	for (uint i=0; i<header_width; ++i)
 	{
@@ -218,6 +214,18 @@ bool pack_header(uint v, uint index, vector<u8>& header)
 		return false;
 	}
 	return true;
+}
+
+// pack_header for vector (safe)
+bool pack_header(uint v, uint index, vector<u8>& header)
+{
+	uint ix = index * header_width;
+	if ((ix + header_width) > header.size())
+	{
+		DEBUG_OUT(DBI,"no room for header?\n");
+		return false;
+	}
+	return pack_header(v, index, header.data());
 }
 
 // for unpacking unsigned integers of header_width from the header
@@ -804,6 +812,151 @@ bool huffmunch_decode_s(const vector<u8>& packed, Stri& unpacked)
 	return true;
 }
 
+// Similar to the NES decoder, keeps an online state of a byte-by-byte decode
+struct DecodeTree
+{
+	const vector<u8>* packed;
+	BitReader* bitstream;
+	uint table_pos;
+	uint node;
+	bool suffix;
+	uint length; 
+};
+
+// Reads one byte from the underlying huffmunch standard stream
+// (based on the NES decoder)
+u8 huffmunch_decode_r_stream(DecodeTree& dt)
+{
+	const vector<u8>& packed = *dt.packed;
+
+	if (dt.length > 0) goto emit_byte;
+	if (dt.suffix) // current symbol is finished, but has a suffix
+	{
+		assert((dt.node+1)<packed.size());
+		uint suffix_node = packed[dt.node+0] + (packed[dt.node+1] << 8);
+		dt.node = dt.table_pos + suffix_node;
+		u8 leaf_type = packed[dt.node]; ++dt.node;
+		if (leaf_type != 2 && leaf_type != 1)
+		{
+			dt.suffix = false;
+			dt.length = 1;
+			goto emit_byte;
+		}
+		dt.suffix = leaf_type == 2;
+		dt.length = packed[dt.node]; ++dt.node;
+		goto emit_byte;
+	}
+	else // walk the tree
+	{
+		dt.node = dt.table_pos;
+	walk_node:
+		assert(dt.node < packed.size());
+		if (dt.node >= packed.size()) return 0; // failsafe
+		u8 leaf_type = packed[dt.node]; ++dt.node;
+		// possible leaf node
+		if (leaf_type == 0)
+		{
+			dt.length = 1;
+			goto emit_byte;
+		}
+		else if (leaf_type <= 2)
+		{
+			dt.suffix = leaf_type == 2;
+			dt.length = packed[dt.node]; ++dt.node;
+			goto emit_byte;
+		}
+		// branch node
+		uint branch = leaf_type-1;
+		if (branch >= 254)
+		{
+			branch = (packed[dt.node+0] + (packed[dt.node+1] << 8)) - 3;
+			dt.node += 2;
+		}
+		uint bit = dt.bitstream->read();
+		if (!bit) goto walk_node; // left branch
+		dt.node += branch; // right branch
+		goto walk_node;
+	}
+
+emit_byte:
+	--dt.length;
+	assert(dt.node < packed.size());
+	if (dt.node >= packed.size()) return 0; // failsafe
+	u8 c = packed[dt.node]; ++dt.node;
+	DEBUG_OUT(DBV, " %02X",c);
+	return c;
+}
+
+// like huffmunch_decode_s but with an additional RLE unpacking
+bool huffmunch_decode_r(const vector<u8>& packed, Stri& unpacked)
+{
+	// header
+	vector<uint> split_start;
+	vector<uint> split_size;
+	uint split_count = unpack_header(0,packed);
+	for (unsigned int i=0; i<split_count; ++i)
+	{
+		split_start.push_back(unpack_header(1+i, packed));
+		split_size.push_back(unpack_header(1+i+split_count,packed));
+	}
+	const uint table_pos = (1 + (split_count * 2)) * header_width;
+
+	BitReader bitstream(&packed);
+
+	for (uint s=0; s<split_count; ++s)
+	{
+		uint length = split_size[s];
+		bitstream.seek(split_start[s]);
+		unpacked.push_back(EMPTY);
+		DEBUG_OUT(DBV,"split %d: %04X (%d bytes)",s,split_start[s],length); // no line ending
+
+		DecodeTree decode_tree;
+		decode_tree.packed = &packed;
+		decode_tree.bitstream = &bitstream;
+		decode_tree.table_pos = table_pos;
+		decode_tree.node = table_pos;
+		decode_tree.suffix = false;
+		decode_tree.length = 0;
+
+		uint run_length = 0;
+		u8 run_value = 0;
+		while (length)
+		{
+			if (run_length == 0)
+			{
+				DEBUG_OUT(DBV,"\nRun:");
+				run_length = huffmunch_decode_r_stream(decode_tree);
+				if (run_length >= 0x80)
+				{
+					run_value = huffmunch_decode_r_stream(decode_tree);
+					DEBUG_OUT(DBV," %d x",256-run_length);
+				}
+				else
+				{
+					DEBUG_OUT(DBV," %d raw",run_length);
+				}
+			}
+			else if (run_length >= 0x80)
+			{
+				unpacked.push_back(run_value);
+				--length;
+				++run_length;
+				if (run_length >= 256) run_length = 0;
+			}
+			else if (run_length > 0)
+			{
+				u8 c = huffmunch_decode_r_stream(decode_tree);
+				unpacked.push_back(c);
+				--length;
+				--run_length;
+			}
+		}
+		DEBUG_OUT(DBV,"\n");
+	}
+
+	return true;
+}
+
 //
 // Canonical tree
 //
@@ -1145,7 +1298,7 @@ bool huffmunch_decode_c(const vector<u8>& packed, Stri& unpacked)
 //
 
 // compute the size of the data with a given dictionary
-MunchSize huffmunch_size(const MunchInput& in, bool canonical)
+MunchSize huffmunch_size(const MunchInput& in, int mode)
 {
 	MunchSize size = {0,0};
 	if (in.data.size() < 1) return size;
@@ -1153,13 +1306,13 @@ MunchSize huffmunch_size(const MunchInput& in, bool canonical)
 	HuffTree tree;
 	huffman_tree(in,tree);
 	size.stream_bits = huffman_tree_bits(tree);
-	size.table_bytes = !canonical ?
+	size.table_bytes = (mode != HUFFMUNCH_CANONICAL) ?
 		huffmunch_tree_bytes_s(tree, in.symbols) :
 		huffmunch_tree_bytes_c(tree, in.symbols);
 	return size;
 }
 
-MunchInput huffmunch_munch(const Stri& data, bool canonical)
+MunchInput huffmunch_munch(const Stri& data, int mode)
 {
 	const uint data_total = data.size() * 8;
 
@@ -1179,7 +1332,7 @@ MunchInput huffmunch_munch(const Stri& data, bool canonical)
 		s.push_back(i);
 		best.symbols.push_back(s);
 	}
-	MunchSize best_size = huffmunch_size(best, canonical);
+	MunchSize best_size = huffmunch_size(best, mode);
 
 	// buffers for storing Rabin-Karp style hashes of various widths for repeated string detection
 	vector<elem> rk[MAX_STEP_SIZE-1];
@@ -1359,7 +1512,7 @@ MunchInput huffmunch_munch(const Stri& data, bool canonical)
 				// test the actual finished size of the new data and tree
 				try
 				{
-					MunchSize next_size = huffmunch_size(next, canonical);
+					MunchSize next_size = huffmunch_size(next, mode);
 					if (next_size < best_size)
 					{
 						minima = false;
@@ -1438,6 +1591,128 @@ const char* huffmunch_error_description(int e)
 	}
 }
 
+int huffmunch_compress_rle(
+	const unsigned char* data,
+	const int data_size,
+	unsigned char* output,
+	unsigned int &output_size,
+	const unsigned int *splits,
+	unsigned int split_count,
+	int mode)
+{
+	// do a pre-pass of RLE encoding
+	vector<u8> rle_data;
+	vector<uint> rle_splits;
+
+	uint pos = 0;
+	for (unsigned int split=0; split<split_count; ++split)
+	{
+		rle_splits.push_back(rle_data.size());
+
+		uint split_start = splits[split];
+		uint split_end = data_size;
+		if ((split+1) < split_count) split_end = splits[split+1];
+		assert(split_start == pos);
+
+		uint bpos = pos;
+		while (pos < split_end)
+		{
+			u8 c = data[pos];
+			uint mpos = pos+1;
+			while (mpos < split_end && c == data[mpos]) ++mpos;
+			uint consecutive = mpos - pos;
+
+			if ((mpos - pos) >= 3) // consecutive run found
+			{
+				while (bpos < pos) // encode any buffered raw runs up to this point
+				{
+					uint run = pos - bpos;
+					if (run > 127) run = 127;
+					rle_data.push_back(run); // raw run length
+					for (uint i=0; i<run; ++i)
+					{
+						rle_data.push_back(data[bpos]); // raw data
+						++bpos;
+					}
+				}
+				assert(bpos == pos);
+				while ((mpos - pos) >= 3) // encode the consecutive run
+				{
+					uint run = mpos - pos;
+					if (run > 128) run = 128;
+					rle_data.push_back(256 - run); // 256 - consecutive run length
+					rle_data.push_back(c); // consecutive value
+					pos += run;
+					bpos = pos;
+				}
+			}
+			else
+			{
+				++pos;
+			}
+		}
+		while (bpos < pos) // encode any leftover bytes as raw runs
+		{
+			uint run = pos - bpos;
+			if (run > 127) run = 127;
+			rle_data.push_back(run); // raw run length
+			for (uint i=0; i<run; ++i)
+			{
+				rle_data.push_back(data[bpos]); // raw data
+				++bpos;
+			}
+		}
+	}
+
+	// compress the RLE encoded data, then replace the split lengths
+	int result = huffmunch_compress(rle_data.data(), rle_data.size(), output, output_size, rle_splits.data(), rle_splits.size(), HUFFMUNCH_STANDARD);
+	if (output && result == HUFFMUNCH_OK)
+	{
+		assert(split_count == rle_splits.size());
+		for (unsigned int i=0; i<split_count; ++i)
+		{
+			uint split_start = splits[i];
+			uint split_end = data_size;
+			if ((i+1) < split_count) split_end = splits[i+1];
+			uint split_size = split_end - split_start;
+			if (!pack_header(split_size, 1+split_count+i, output)) return HUFFMUNCH_HEADER_OVERFLOW;
+		}
+
+		#if HUFFMUNCH_DEBUG
+		vector<u8> packed;
+		for (uint i=0; i<output_size; ++i) packed.push_back(output[i]);
+		Stri sdata;
+		unsigned int s=0;
+		for (int i=0; i<data_size; ++i)
+		{
+			if (s < split_count && i == splits[s])
+			{
+				sdata.push_back(EMPTY);
+				++s;
+			}
+			sdata.push_back(elem(data[i]));
+		}
+		for (; s < split_count; ++s) sdata.push_back(EMPTY);
+		Stri verify;
+		if (huffmunch_decode_r(packed, verify))
+		{
+			if (verify != sdata)
+			{
+				DEBUG_OUT(DBV,"error: verify failed, %d bytes decoded\n",verify.size());
+				return HUFFMUNCH_VERIFY_FAIL;
+			}
+		}
+		else
+		{
+			DEBUG_OUT(DBV,"error: verify unable to decode\n");
+			return HUFFMUNCH_VERIFY_FAIL;
+		}
+		#endif
+	}
+
+	return result;
+}
+
 int huffmunch_compress(
 	const unsigned char* data,
 	unsigned int data_size,
@@ -1445,7 +1720,7 @@ int huffmunch_compress(
 	unsigned int& output_size,
 	const unsigned int *splits,
 	unsigned int split_count,
-	bool canonical)
+	int mode)
 {
 	if (splits == NULL)
 	{
@@ -1453,6 +1728,11 @@ int huffmunch_compress(
 		split_count = 1;
 	}
 	if (!splits_valid(splits, split_count)) return HUFFMUNCH_INVALID_SPLITS;
+
+	if (mode == HUFFMUNCH_RLE)
+	{
+		return huffmunch_compress_rle(data, data_size, output, output_size, splits, split_count, mode);
+	}
 
 	try
 	{
@@ -1473,7 +1753,7 @@ int huffmunch_compress(
 		print_stri_setup(sdata);
 		#endif
 
-		MunchInput best = huffmunch_munch(sdata, canonical);
+		MunchInput best = huffmunch_munch(sdata, mode);
 
 		HuffTree tree;
 		unordered_map<elem,HuffCode> codes;
@@ -1488,7 +1768,7 @@ int huffmunch_compress(
 		for (uint i=0; i<prefix_size; ++i) packed.push_back(44); // reserve space for header
 
 		huffman_tree(best, tree);
-		!canonical ?
+		(mode != HUFFMUNCH_CANONICAL) ?
 			huffmunch_tree_build_s(tree, best.symbols, codes, packed) :
 			huffmunch_tree_build_c(tree, best.symbols, codes, packed);
 		huffman_encode(codes, best.data, packed, packed_splits);
@@ -1510,7 +1790,7 @@ int huffmunch_compress(
 
 		#if HUFFMUNCH_DEBUG
 		Stri verify;
-		if (!canonical ?
+		if ((mode != HUFFMUNCH_CANONICAL) ?
 				huffmunch_decode_s(packed, verify) : 
 				huffmunch_decode_c(packed, verify))
 		{
@@ -1558,7 +1838,7 @@ int huffmunch_decompress(
 	unsigned int data_size,
 	unsigned char* output,
 	unsigned int& output_size,
-	bool canonical)
+	int mode)
 {
 	try
 	{
@@ -1567,9 +1847,17 @@ int huffmunch_decompress(
 		assert(packed.size() == data_size);
 
 		Stri unpacked;
-		!canonical ?
-			huffmunch_decode_s(packed, unpacked) :
-			huffmunch_decode_c(packed, unpacked);
+		switch (mode)
+		{
+		case HUFFMUNCH_STANDARD:
+			huffmunch_decode_s(packed, unpacked); break;
+		case HUFFMUNCH_CANONICAL:
+			huffmunch_decode_c(packed, unpacked); break;
+		case HUFFMUNCH_RLE:
+			huffmunch_decode_r(packed, unpacked); break;
+		default:
+			return HUFFMUNCH_INTERNAL_ERROR;
+		}
 
 		unsigned int pos = 0;
 		for (unsigned int i=0; i < unpacked.size(); ++i)

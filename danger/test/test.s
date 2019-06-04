@@ -7,10 +7,17 @@
 .import huffmunch_load
 .import huffmunch_read
 
+.ifdef RLE
+.import huffmunch_read_rle
+.endif
+
 .segment "ZEROPAGE"
 
 .exportzp huffmunch_zpblock
 huffmunch_zpblock: .res 9
+.ifdef RLE
+	.res 11-9 ; RLE requires more RAM
+.endif
 .ifdef CANONICAL
 	.res 24-9 ; canonical requires more RAM
 .endif
@@ -18,9 +25,13 @@ huffmunch_zpblock: .res 9
 .segment "RODATA"
 
 story:
-	.ifndef CANONICAL
+	.ifdef STANDARD
 		.incbin "../output/danger0000.hfb"
-	.else
+	.endif
+	.ifdef RLE
+		.incbin "../output/danger0000.hfr"
+	.endif
+	.ifdef CANONICAL
 		.incbin "../output/danger0000.hfc"
 	.endif
 
@@ -57,6 +68,10 @@ _test_begin_block: ; X:A = block
 	rts ; X:A = block length
 
 _test_read_byte:
-	jsr huffmunch_read ; A = byte read
+	.ifndef RLE
+		jsr huffmunch_read ; A = byte read
+	.else
+		jsr huffmunch_read_rle
+	.endif
 	ldx #0
 	rts ; X:A = byte read

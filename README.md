@@ -2,6 +2,8 @@
 
 A practical generic compression library for the NES or other 6502 platforms.
 
+This branch is testing an experimental Huffmunch + RLE variation.
+
 ## Usage
 
 ### Compression
@@ -120,6 +122,7 @@ The performance of this compression method is measured here on the
 | Uncompressed |   26 cycles/byte |  10 bytes |      2 bytes  | 45418 bytes (100.0%) |
 | Standard     |  260 cycles/byte | 330 bytes |      9 bytes  | 21520 bytes (47.69%) |
 | Canonical    | 1000 cycles/byte | 578 bytes |     24 bytes  | 20751 bytes (45.99%) |
+| RLE          |    ? cycles/byte | 369 bytes |     11 bytes  |     ? bytes (??.??%) |
 
 The compressed size performance will also vary a lot depending on
  the type of data used. Plain text seems to regularly do better

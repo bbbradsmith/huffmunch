@@ -16,6 +16,11 @@ const int HUFFMUNCH_INVALID_SPLITS = 4; // splits must start with 0 and have inc
 const int HUFFMUNCH_HEADER_OVERFLOW = 5; // split values overflow header width
 const int HUFFMUNCH_DEPTH_OVERFLOW = 6; // tree depth exceeds canonical allowed depth
 
+// huffmunch_compress modes
+const int HUFFMUNCH_STANDARD = 0;
+const int HUFFMUNCH_CANONICAL = 1;
+const int HUFFMUNCH_RLE = 2;
+
 // huffmunch_error_description
 //   brief description of the return values above
 extern const char* huffmunch_error_description(int e);
@@ -44,7 +49,7 @@ extern int huffmunch_compress(
 	unsigned int& output_size,
 	const unsigned int *splits,
 	unsigned int split_count,
-	bool canonical = false);
+	int mode = HUFFMUNCH_STANDARD);
 
 // huffmunch_decompress
 //   data
@@ -60,7 +65,7 @@ extern int huffmunch_decompress(
 	unsigned int data_size,
 	unsigned char* output,
 	unsigned int& output_size,
-	bool canonical = false);
+	int mode = HUFFMUNCH_STANDARD);
 
 enum
 {

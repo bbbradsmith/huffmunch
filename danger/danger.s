@@ -49,6 +49,9 @@ music_on:   .res 1
 ; huffmunch data
 .exportzp huffmunch_zpblock
 huffmunch_zpblock: .res 9
+.ifdef RLE
+	.res 11-9 ; RLE requires more RAM
+.endif
 .ifdef CANONICAL
 	.res 24-9 ; canonical requires more RAM
 .endif
@@ -66,6 +69,10 @@ oam: .res 256
 
 .import huffmunch_load
 .import huffmunch_read
+
+.ifdef RLE
+.import huffmunch_read_rle
+.endif
 
 .include "music/music.inc"
 
@@ -308,7 +315,11 @@ number_position:
 	ldx #0
 	stx i
 	:
-		jsr huffmunch_read
+		.ifdef RLE
+			jsr huffmunch_read_rle
+		.else
+			jsr huffmunch_read
+		.endif
 		cmp #0
 		beq :+
 		ldx i
@@ -336,7 +347,11 @@ number_position:
 	ldx #0
 	stx i
 	:
-		jsr huffmunch_read
+		.ifdef RLE
+			jsr huffmunch_read_rle
+		.else
+			jsr huffmunch_read
+		.endif
 		cmp #0
 		beq :+
 		ldx i
@@ -1180,9 +1195,13 @@ palette_data:
 	.byte $0F, $05, $15, $30
 
 story:
-	.ifndef CANONICAL
+	.ifdef STANDARD
 		.incbin "output/danger0000.hfb"
-	.else
+	.endif
+	.ifdef RLE
+		.incbin "output/danger0000.hfr"
+	.endif
+	.ifdef CANONICAL
 		.incbin "output/danger0000.hfc"
 	.endif
 

@@ -11,12 +11,12 @@
 #include <vector>
 
 const int VERSION_MAJOR = 1;
-const int VERSION_MINOR = 0;
+const int VERSION_MINOR = 1;
 
 #include "huffmunch.h"
 
 bool verbose = false;
-bool canonical = false;
+int hm_mode = HUFFMUNCH_STANDARD;
 unsigned int header_width = 2;
 
 int huffmunch_file(const char* file_in, const char* file_out)
@@ -50,7 +50,7 @@ int huffmunch_file(const char* file_in, const char* file_out)
 	fclose(f);
 	printf("%6d bytes read from %s\n", size_in, file_in);
 
-	int result = huffmunch_compress(buffer_in, size_in, buffer_out, size_out, NULL, 0, canonical);
+	int result = huffmunch_compress(buffer_in, size_in, buffer_out, size_out, NULL, 0, hm_mode);
 	if (result != HUFFMUNCH_OK)
 	{
 		printf("error: compression error %d: %s\n", result, huffmunch_error_description(result));
@@ -253,7 +253,7 @@ int huffmunch_list(const char* list_file, const char* out_file)
 			data.data()+data_start,data_end-data_start,
 			bank.data(),result_size,
 			temp_splits.data(),temp_splits.size(),
-			canonical);
+			hm_mode);
 
 		if (result == HUFFMUNCH_OUTPUT_OVERFLOW) // start a new bank if it doesn't fit
 		{
@@ -277,7 +277,7 @@ int huffmunch_list(const char* list_file, const char* out_file)
 				data.data()+data_start,data_end-data_start,
 				bank.data(),result_size,
 				NULL,1,
-				canonical);
+				hm_mode);
 		}
 
 		if (result != HUFFMUNCH_OK)
@@ -357,6 +357,8 @@ int print_usage()
 		"        Compress a set of files together from a list file.\n"
 		"\n"
 		"optional arguments:\n"
+        "    -R\n"
+        "        RLE pre-compression, may improve compression for data with repetitive byte runs.\n"
 		"    -C\n"
 		"        Canonical tree format, slightly smaller, much slower to decompress.\n"
 		"    -V\n"
@@ -416,10 +418,15 @@ int main(int argc, const char** argv)
 		{
 			switch (arg[1])
 			{
+			case 'r':
+			case 'R':
+				if (strlen(arg) > 2) valid_args = false;
+				hm_mode = HUFFMUNCH_RLE;
+				break;
 			case 'c':
 			case 'C':
 				if (strlen(arg) > 2) valid_args = false;
-				canonical = true;
+				hm_mode = HUFFMUNCH_CANONICAL;
 				break;
 			case 'v':
 			case 'V':
