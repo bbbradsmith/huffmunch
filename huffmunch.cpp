@@ -714,8 +714,11 @@ bool huffmunch_decode_s(const vector<u8>& packed, Stri& unpacked)
 		#if HUFFMUNCH_DEBUG
 		if (debug_bits & DBV)
 		{
+			uint split_end = packed.size();
+			if ((s+1) < split_count) split_end = split_start[s+1];
+			uint bit_length = (split_end - split_start[s]) * 8;
 			uint i=0;
-			while (i<(length*8))
+			while (i<bit_length)
 			{
 				printf("%d",bitstream.read());
 				if ((i&7)==7) printf(" ");
@@ -1042,8 +1045,11 @@ bool huffmunch_decode_c(const vector<u8>& packed, Stri& unpacked)
 		#if HUFFMUNCH_DEBUG
 		if (debug_bits & DBV)
 		{
+			uint split_end = packed.size();
+			if ((s+1) < split_count) split_end = split_start[s+1];
+			uint bit_length = (split_end - split_start[s]) * 8;
 			uint i=0;
-			while (i<(length*8))
+			while (i<bit_length)
 			{
 				printf("%d",bitstream.read());
 				if ((i&7)==7) printf(" ");
