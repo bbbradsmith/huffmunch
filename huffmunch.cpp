@@ -1663,6 +1663,7 @@ int huffmunch_compress_rle(
 			}
 		}
 	}
+	DEBUG_OUT(DBM,"RLE pre-pass produced %d bytes from %d bytes input.\n",rle_data.size(),data_size);
 
 	// compress the RLE encoded data, then replace the split lengths
 	int result = huffmunch_compress(rle_data.data(), rle_data.size(), output, output_size, rle_splits.data(), rle_splits.size(), HUFFMUNCH_STANDARD);

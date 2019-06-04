@@ -2,7 +2,23 @@
 
 A practical generic compression library for the NES or other 6502 platforms.
 
-This branch is testing an experimental Huffmunch + RLE variation.
+This branch is testing an experimental Huffmunch + RLE variation with
+applies a simple RLE encoding before compression (or after decompression).
+
+Unfortunately this seemed to be a dead end, as I found that the RLE
+savings were counteracted by poorer Huffmunch performance due to a
+corresponding increase in entropy.
+
+I can construct pathological input cases where there are a large number of
+repeated byte runs, which do compress better with this method,
+but I haven't found any "real world" data set where it actually improved
+the overall compression size after Huffmunch is applied as well.
+
+Huffmunch by itself seems to do reasonably well at shrinking long byte runs
+anyway.
+
+I am preserving this branch here in case the implementation is useful
+reference, but I did not find a practical application for it.
 
 ## Usage
 
@@ -122,7 +138,7 @@ The performance of this compression method is measured here on the
 | Uncompressed |   26 cycles/byte |  10 bytes |      2 bytes  | 45418 bytes (100.0%) |
 | Standard     |  260 cycles/byte | 330 bytes |      9 bytes  | 21520 bytes (47.69%) |
 | Canonical    | 1000 cycles/byte | 578 bytes |     24 bytes  | 20751 bytes (45.99%) |
-| RLE          |    ? cycles/byte | 369 bytes |     11 bytes  |     ? bytes (??.??%) |
+| RLE          |  285 cycles/byte | 369 bytes |     11 bytes  | 24576 bytes (54.11%) |
 
 The compressed size performance will also vary a lot depending on
  the type of data used. Plain text seems to regularly do better
