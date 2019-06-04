@@ -64,10 +64,15 @@ The decompression library is provided as 6502 assembly in ca65 ([cc65](https://c
 7. Call **huffmunch_read** once to reach each byte of uncompressed data.
 8. Once the data has been read out, the bytes of _huffmunch_zpblock_ are not needed and can be freely used until another data block is needed.
 
-There are two versions of the decompression library:
+There are three versions of the decompression library:
 
 * **huffmunch.s** - standard version
 * **huffmunch_canonical.s** - canonical version (much slower, slightly better compression)
+* **huffmunch_rle.s** - standard version + an extra decoder with an RLE post-pass
+
+For the RLE version, call **huffmunch_read_rle** instead of **huffmunch_read**
+when unpacking data that used the RLE function.
+This permits the use of both standard and RLE types of data to be used in the same project.
 
 See the **danger** folder for an example NES project.
 

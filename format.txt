@@ -138,6 +138,22 @@ some variables in the decoder. The provided NES implementation uses
 24-bit values, so the default depth is limited to 24.
 
 
+RLE
+===
+
+The RLE version of huffmunch includes an additional run-length decoding step
+after fetching the data from a Standard tree.
+
+This consists of packets, starting with a byte that designates the size and type
+of the packet, followed by data.
+
+1. BYTE - 1-127 - length of raw packet
+2. Bytes x length - byte data to fill this packet
+
+1. BYTE - 128-255 - inverted length of run packet (256-this)=length
+2. BYTE - single byte to repeat length times
+
+
 Bitstream
 =========
 
