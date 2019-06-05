@@ -159,6 +159,10 @@ For this degenerate case, the same symbol should be emitted as many times as nee
 to fill up the length of uncompressed data specified by the header.
 
 
+After reaching a leaf, the emitted byte should be added to the last byte decompressed (modulo 256),
+as the data is stored in a first-difference format.
+
+
 
 Bank Table
 ==========

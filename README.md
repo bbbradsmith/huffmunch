@@ -2,6 +2,16 @@
 
 A practical generic compression library for the NES or other 6502 platforms.
 
+This branch experiments with a first-difference pre-pass on the data.
+Each byte of the input will be replaced with the difference between itself
+and the previous byte. This reduces any repeated byte runs to strings of zeroes,
+which will share common redundancy.
+
+Unfortunately, while this improved compression for pathological RLE cases,
+it seems to produce larger data for most of my tests, especially on text.
+
+Another dead-end experiment.
+
 ## Usage
 
 ### Compression

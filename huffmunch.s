@@ -17,7 +17,8 @@ hm_tree   = <(huffmunch_zpblock + 4) ; pointer to tree base
 hm_byte   = <(huffmunch_zpblock + 6) ; current byte of bitstream
 hm_status = <(huffmunch_zpblock + 7) ; bits 0-2 = bits left in hm_byte, bit 7 = string with suffix
 hm_length = <(huffmunch_zpblock + 8) ; bytes left in current string
-.assert (huffmunch_zpblock + 9) <= 256, error, "huffmunch_zpblock requires 9 bytes on zero page"
+hm_last   = <(huffmunch_zpblock + 9) ; last byte produced
+.assert (huffmunch_zpblock + 10) <= 256, error, "huffmunch_zpblock requires 10 bytes on zero page"
 
 ; NOTE: only hm_node and hm_stream need to be on ZP
 ;       the rest could go elsewhere, but still recommended for ZP
@@ -116,10 +117,11 @@ hm_length = <(huffmunch_zpblock + 8) ; bytes left in current string
 	sta hm_byte ; hm_byte doesn't need initialization, just for consistency
 	sta hm_status
 	sta hm_length
+	sta hm_last
 	rts
 .endproc
 
-.proc huffmunch_read
+.proc huffmunch_read_
 	ldy #0
 	lda hm_length ; string bytes pending
 	beq string_empty
@@ -266,4 +268,12 @@ walk_right_long:
 	stx hm_node+0
 	ldy #0
 	jmp walk_node
+.endproc
+
+.proc huffmunch_read
+	jsr huffmunch_read_
+	clc
+	adc hm_last
+	sta hm_last
+	rts
 .endproc

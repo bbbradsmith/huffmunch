@@ -1464,14 +1464,18 @@ int huffmunch_compress(
 	{
 		Stri sdata;
 		unsigned int s=0;
+		u8 last = 0;
 		for (unsigned int i=0; i<data_size; ++i)
 		{
 			if (s < split_count && i == splits[s])
 			{
 				sdata.push_back(EMPTY);
 				++s;
+				last = 0;
 			}
-			sdata.push_back(elem(data[i]));
+			u8 next = data[i];
+			sdata.push_back(elem((data[i]-last)&0xFF));
+			last = next;
 		}
 		for (; s < split_count; ++s) sdata.push_back(EMPTY);
 
@@ -1578,13 +1582,20 @@ int huffmunch_decompress(
 			huffmunch_decode_c(packed, unpacked);
 
 		unsigned int pos = 0;
+		u8 last = 0;
 		for (unsigned int i=0; i < unpacked.size(); ++i)
 		{
 			elem v = unpacked[i];
 			if (v != EMPTY)
 			{
-				if (output && pos < output_size) output[pos] = v;
+				u8 dv = (v + last) & 0xFF;
+				last = dv;
+				if (output && pos < output_size) output[pos] = dv;
 				++pos;
+			}
+			else
+			{
+				last = 0;
 			}
 		}
 		if (pos > output_size) return HUFFMUNCH_OUTPUT_OVERFLOW;

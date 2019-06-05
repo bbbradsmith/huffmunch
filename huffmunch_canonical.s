@@ -23,8 +23,9 @@ hm_c       = <(huffmunch_zpblock + 15) ; current code (24-bit)
 hm_dc      = <(huffmunch_zpblock + 18) ; depth-relative code (16-bit)
 hm_ds      = <(huffmunch_zpblock + 20) ; string count at current depth (16-bit)
 hm_s       = <(huffmunch_zpblock + 22) ; current string reached (16-bit)
+hm_last    = <(huffmunch_zpblock + 25) ; last byte produced
 
-.assert (huffmunch_zpblock + 24) <= 256, error, "huffmunch_zpblock requires 24 bytes on zero page"
+.assert (huffmunch_zpblock + 24) <= 256, error, "huffmunch_zpblock requires 25 bytes on zero page"
 
 ; NOTE: only hm_node and hm_stream need to be on ZP
 ;       the rest could go elsewhere, but still recommended for ZP
@@ -179,10 +180,11 @@ hm_s       = <(huffmunch_zpblock + 22) ; current string reached (16-bit)
 	sta hm_ds+1
 	sta hm_s+0
 	sta hm_s+1
+	sta hm_last
 	rts
 .endproc
 
-.proc huffmunch_read
+.proc huffmunch_read_
 	ldy #0
 	lda hm_length ; string bytes pending
 	beq string_empty
@@ -428,4 +430,12 @@ string1:
 		inc hm_node+1
 	:
 	jmp emit_byte
+.endproc
+
+.proc huffmunch_read
+	jsr huffmunch_read_
+	clc
+	adc hm_last
+	sta hm_last
+	rts
 .endproc

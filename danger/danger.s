@@ -48,9 +48,9 @@ music_on:   .res 1
 
 ; huffmunch data
 .exportzp huffmunch_zpblock
-huffmunch_zpblock: .res 9
+huffmunch_zpblock: .res 10
 .ifdef CANONICAL
-	.res 24-9 ; canonical requires more RAM
+	.res 25-10 ; canonical requires more RAM
 .endif
 
 .segment "RAM"
@@ -67,7 +67,25 @@ oam: .res 256
 .import huffmunch_load
 .import huffmunch_read
 
-.include "music/music.inc"
+;.include "music/music.inc"
+
+; HACK with the poor compression of first-difference pre-pass
+; there was no room for music anymore
+.include "output/data_music_enums.inc"
+.segment "ZEROPAGE"
+player_pal: .res 1
+player_pause: .res 1
+player_next_music: .res 1
+player_next_sound: .res 1
+player_current_music: .res 1
+.segment "CODE"
+music_init:
+music_tick:
+	rts
+.macro PLAY_SOUND xxx
+	lda #xxx
+	sta player_next_sound + .ident(.sprintf("SOUND_MODE__%d",xxx))
+.endmacro
 
 ;
 ; utilities

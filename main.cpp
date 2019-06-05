@@ -11,7 +11,7 @@
 #include <vector>
 
 const int VERSION_MAJOR = 1;
-const int VERSION_MINOR = 0;
+const int VERSION_MINOR = 2;
 
 #include "huffmunch.h"
 
