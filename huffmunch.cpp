@@ -555,7 +555,6 @@ void huffmunch_tree_build_node_s(const HuffTree& tree, const HuffNode* node, con
 			printf(" ");
 			print_stri(symbols[node->leaf]);
 		}
-		printf("\n");
 	}
 	#endif
 
@@ -613,10 +612,19 @@ void huffmunch_tree_build_node_s(const HuffTree& tree, const HuffNode* node, con
 			fixup.push_back(f);
 			output.push_back(42); // symbol chosen just to be identifiable
 			output.push_back(43);
+			#if HUFFMUNCH_DEBUG
+			if (debug_bits & DBT)
+			{
+				printf("-");
+				print_stri(symbols[suffix]);
+			}
+			#endif
 		}
 
+		DEBUG_OUT(DBT,"\n");
 		return;
 	}
+	DEBUG_OUT(DBT,"\n");
 
 	assert(node->c0 != NULL);
 	assert(node->c1 != NULL);
@@ -935,7 +943,7 @@ void huffmunch_tree_build_c(const HuffTree& tree, const vector<Stri>& symbols, u
 		{
 			assert(bitcode < (1U<<d)); // can't be more than 2^d leaves at level d
 			HuffCode code = { bitcode, d };
-			DEBUG_OUT(DBT,"symbol %d/%d: ",bitcode,d);
+			DEBUG_OUT(DBT,"symbol %d/%d ",bitcode,d);
 			++bitcode; // next available leaf on this layer
 
 			elem e = level[c];
@@ -976,7 +984,13 @@ void huffmunch_tree_build_c(const HuffTree& tree, const vector<Stri>& symbols, u
 				fixup.push_back(f);
 				output.push_back(42); // symbol chosen just to be identifiable
 				output.push_back(43);
-				DEBUG_OUT(DBT," (%d)",suffix);
+				#if HUFFMUNCH_DEBUG
+				if (debug_bits & DBT)
+				{
+					printf("-");
+					print_stri(symbols[suffix]);
+				}
+				#endif
 			}
 			DEBUG_OUT(DBT,"\n");
 		}
