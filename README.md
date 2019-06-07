@@ -1,6 +1,6 @@
 # huffmunch
 
-A practical generic compression library for the NES or other 6502 platforms.
+A practical generic lossless compression library for the NES or other 6502 platforms.
 
 ## Usage
 
