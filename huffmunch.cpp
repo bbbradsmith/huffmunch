@@ -374,6 +374,12 @@ struct HuffTree
 		visit_count = 0;
 	}
 
+	uint count(elem e) const
+	{
+		for (uint i=0; i<container.size(); ++i) if(container[i]->leaf == e) return container[i]->count;
+		return 0;
+	}
+
 	HuffTree() : head(NULL) {}
 	~HuffTree() { empty(); }
 
@@ -621,7 +627,7 @@ void huffmunch_tree_build_node_s(const HuffTree& tree, const HuffNode* node, con
 			#endif
 		}
 
-		DEBUG_OUT(DBT,"\n");
+		DEBUG_OUT(DBT," x %d\n",node->count);
 		return;
 	}
 	DEBUG_OUT(DBT,"\n");
@@ -992,7 +998,7 @@ void huffmunch_tree_build_c(const HuffTree& tree, const vector<Stri>& symbols, u
 				}
 				#endif
 			}
-			DEBUG_OUT(DBT,"\n");
+			DEBUG_OUT(DBT," x %d\n",tree.count(e));
 		}
 		bitcode *= 2; // next available leaf node on next layer will be at 2x index
 	}
