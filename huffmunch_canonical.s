@@ -15,7 +15,7 @@ hm_node    = <(huffmunch_zpblock + 0); pointer to current node of tree
 hm_stream  = <(huffmunch_zpblock + 2) ; pointer to bitstream
 hm_tree    = <(huffmunch_zpblock + 4) ; pointer to tree base + 1
 hm_byte    = <(huffmunch_zpblock + 6) ; current byte of bitstream
-hm_status  = <(huffmunch_zpblock + 7) ; bits 0-2 = bits left in hm_byte, bit 7 = string with suffix
+hm_status  = <(huffmunch_zpblock + 7) ; bits 0-2 = bits left in hm_byte, bit 7 = suffix, bit 6 = repeat
 hm_length  = <(huffmunch_zpblock + 8) ; bytes left in current string
 hm_strings = <(huffmunch_zpblock + 10) ; pointer to string table
 hm_fc      = <(huffmunch_zpblock + 12) ; first code at current depth (24-bit)
@@ -23,8 +23,9 @@ hm_c       = <(huffmunch_zpblock + 15) ; current code (24-bit)
 hm_dc      = <(huffmunch_zpblock + 18) ; depth-relative code (16-bit)
 hm_ds      = <(huffmunch_zpblock + 20) ; string count at current depth (16-bit)
 hm_s       = <(huffmunch_zpblock + 22) ; current string reached (16-bit)
+hm_repeat  = <(huffmunch_zpblock + 24) ; repeated string length
 
-.assert (huffmunch_zpblock + 24) <= 256, error, "huffmunch_zpblock requires 24 bytes on zero page"
+.assert (huffmunch_zpblock + 25) <= 256, error, "huffmunch_zpblock requires 25 bytes on zero page"
 
 ; NOTE: only hm_node and hm_stream need to be on ZP
 ;       the rest could go elsewhere, but still recommended for ZP
@@ -194,10 +195,30 @@ emit_byte:
 		inc hm_node+1
 	:
 	rts
+repeat_suffix:
+	; Y = 0
+	dec hm_repeat
+	beq repeat_finished
+	lda (hm_node), Y
+	sta hm_length
+	lda hm_node+0
+	sec
+	sbc hm_length
+	sta hm_node+0
+	lda hm_node+1
+	sbc #0
+	sta hm_node+1
+	jmp emit_byte
+repeat_finished:
+	lda hm_status
+	and #$B7
+	sta hm_status
+	jmp walk_tree
 string_empty:
 	; hm_length = 0
 	; Y = 0
 	bit hm_status
+	bvs repeat_suffix
 	bpl walk_tree
 	; follow suffix
 	lda (hm_node), Y
@@ -226,6 +247,7 @@ leaf0:
 	; hm_status high bit is already set (suffix)
 	iny
 	lda (hm_node), Y
+	beq leaf0_repeat
 	sta hm_length
 	lda hm_node+0
 	clc
@@ -235,6 +257,26 @@ leaf0:
 		inc hm_node+1
 	:
 	dey
+	jmp emit_byte
+leaf0_repeat:
+	; Y = 1
+	iny
+	lda (hm_node), Y
+	sta hm_length
+	iny
+	lda (hm_node), Y
+	sta hm_repeat
+	lda hm_node+0
+	clc
+	adc #4
+	sta hm_node+0
+	bcc :+
+		inc hm_node+1
+	:
+	lda hm_status
+	ora #$40
+	sta hm_status
+	ldy #0
 	jmp emit_byte
 walk_tree:
 	lda hm_tree+0
@@ -364,8 +406,8 @@ next_string:
 	ora hm_s+1
 	beq found_string
 	lda (hm_node), Y
-	beq skip_suffixed
-skip_normal: ; skip A bytes + 1
+	beq skip0
+skip1: ; skip A bytes + 1
 	clc
 	adc hm_node+0
 	sta hm_node+0
@@ -377,9 +419,10 @@ skip_normal: ; skip A bytes + 1
 		inc hm_node+1
 	:
 	jmp skip_finish
-skip_suffixed: ; after 0, skip number of bytes + 4
+skip0: ; after 0, skip number of bytes + 4
 	iny
 	lda (hm_node), Y
+	beq skip0_repeat
 	clc
 	adc hm_node+0
 	sta hm_node+0
@@ -394,6 +437,24 @@ skip_suffixed: ; after 0, skip number of bytes + 4
 		inc hm_node+1
 	:
 	dey
+	jmp skip_finish
+skip0_repeat: ; after 0, 0, skip number of bytes + 6
+	iny
+	lda (hm_node), Y
+	clc
+	adc hm_node+0
+	sta hm_node+0
+	bcc :+
+		inc hm_node+1
+	:
+	lda hm_node+0
+	clc
+	adc #6
+	sta hm_node+0
+	bcc :+
+		inc hm_node+1
+	:
+	ldy #0
 	;jmp skip_finish
 skip_finish:
 	lda hm_s+0
@@ -404,17 +465,18 @@ skip_finish:
 	jmp next_string
 found_string:
 	lda (hm_node), Y
-	beq string1
-string0:
+	beq string0
+string1:
 	sta hm_length
 	inc hm_node+0
 	bne :+
 		inc hm_node+1
 	:
 	jmp emit_byte
-string1:
+string0:
 	iny
 	lda (hm_node), Y
+	beq string0_repeat
 	sta hm_length
 	lda hm_status
 	ora #$80
@@ -423,6 +485,22 @@ string1:
 	lda hm_node+0
 	clc
 	adc #2
+	sta hm_node+0
+	bcc :+
+		inc hm_node+1
+	:
+	jmp emit_byte
+string0_repeat:
+	iny
+	lda (hm_node), Y
+	sta hm_length
+	lda hm_status
+	ora #$40
+	sta hm_status
+	ldy #0
+	lda hm_node+0
+	clc
+	adc #4
 	sta hm_node+0
 	bcc :+
 		inc hm_node+1

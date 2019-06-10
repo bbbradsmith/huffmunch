@@ -301,10 +301,13 @@ inline void print_tri(const Stri& v) { (void)v; }
 
 // Input to the Huffmunch compressor is a string of data, and a set of symbols to use
 
+typedef pair<uint,uint> Symrep;
+
 struct MunchInput
 {
 	Stri data;
 	vector<Stri> symbols;
+	vector<Symrep> symreps;
 };
 
 struct MunchSize
@@ -501,11 +504,39 @@ elem best_suffix(elem e, uint overhead, const vector<Stri>& symbols, const vecto
 	return best;
 }
 
+Symrep repeating_suffix(const Stri& s)
+{
+	const uint len = s.length();
+	uint best_r = 0;
+	uint best_reps = 0;
+
+	for (uint r = 1; r <= (len/2); ++r)
+	{
+		uint max_reps = 0;
+		int pos = int(len - (2 * r));
+		while (pos >= 0 && s[pos] == s[pos+r]) { ++max_reps; pos-=r; }
+		for (uint rs = 1; rs < r && max_reps > best_reps; ++rs)
+		{
+			uint reps = 0;
+			pos = int(len - (2 * r)) + rs;
+			while (pos >= 0 && s[pos] == s[pos+r] && reps < max_reps) { ++reps; pos-=r; }
+			if (reps < max_reps) max_reps = reps;
+		}
+		if (max_reps > best_reps)
+		{
+			best_reps = max_reps;
+			best_r = r;
+		}
+	}
+
+	return Symrep(best_r, best_reps);
+}
+
 //
 // Standard tree
 //
 
-uint huffmunch_tree_bytes_node_s(const HuffTree& tree, const HuffNode* node, const vector<Stri>& symbols)
+uint huffmunch_tree_bytes_node_s(const HuffTree& tree, const HuffNode* node, const vector<Stri>& symbols, const vector<Symrep>& symreps)
 {
 	if (node->leaf != EMPTY)
 	{
@@ -514,25 +545,32 @@ uint huffmunch_tree_bytes_node_s(const HuffTree& tree, const HuffNode* node, con
 		static_assert(MAX_SYMBOL_SIZE <= 255, "huffmunch tree data structure does not support leaf strings longer than 255 bytes.");
 		assert(s.size() <= MAX_SYMBOL_SIZE);
 
-		// store single byte symbol
-		if (s.size() == 1) return 1 + 1; // 0 to designate single-byte leaf, 1 byte string
+		// single byte symbol (0, 1 byte string)
+		if (s.size() == 1) return 2;
 
-		// search for potential suffix strings
+		// full string (1, 1 byte length, string)
+		uint best = 2 + s.length();
+
+		// string with repeating string (254, 1 byte length, 1 byte repeat count, string, 1 byte loop length)
+		Symrep symrep = symreps[node->leaf];
+		uint repsave = symrep.first * symrep.second;
+		if (repsave > 2) best = 4 + s.length() - repsave;
+
+		// string with suffix (2, 1 byte length, string, 2 byte suffix pointer)
 		elem suffix = best_suffix(node->leaf, 2, symbols, tree.visited);
 		if (suffix != EMPTY)
 		{
-			// 2 to indicate string with suffix reference, 1 byte length, string, 16-bit suffix pointer
-			return 2 + (s.size() - symbols[suffix].size()) + 2;
+			uint ssize = 4 + s.length() - symbols[suffix].length();
+			if (ssize < best) best = ssize;
 		}
 
-		// store whole string
-		return 2 + s.length(); // 1 to indicate string, 1 byte length, string
+		return best;
 	}
 
 	assert(node->c0 != NULL);
 	assert(node->c1 != NULL);
-	uint ta = huffmunch_tree_bytes_node_s(tree, node->c0, symbols);
-	uint tb = huffmunch_tree_bytes_node_s(tree, node->c1, symbols);
+	uint ta = huffmunch_tree_bytes_node_s(tree, node->c0, symbols, symreps);
+	uint tb = huffmunch_tree_bytes_node_s(tree, node->c1, symbols, symreps);
 	uint tmin = min(ta,tb); // smaller node goes on left
 	uint skip = tmin + 1; // skip distance is left node + 1 byte to store the distance
 	assert (skip >= 3); // leaf must be at least 2 bytes
@@ -542,12 +580,14 @@ uint huffmunch_tree_bytes_node_s(const HuffTree& tree, const HuffNode* node, con
 	return 3 + ta + tb;
 }
 
-uint huffmunch_tree_bytes_s(const HuffTree& tree, const vector<Stri>& symbols)
+uint huffmunch_tree_bytes_s(const HuffTree& tree, const vector<Stri>& symbols, const vector<Symrep>& symreps)
 {
-	return huffmunch_tree_bytes_node_s(tree, tree.head, symbols);
+	assert(symbols.size() == symreps.size());
+	return huffmunch_tree_bytes_node_s(tree, tree.head, symbols, symreps);
 }
 
-void huffmunch_tree_build_node_s(const HuffTree& tree, const HuffNode* node, const vector<Stri>& symbols,
+void huffmunch_tree_build_node_s(const HuffTree& tree, const HuffNode* node,
+	const vector<Stri>& symbols, const vector<Symrep>& symreps,
 	uint depth, uint code, unordered_map<elem,HuffCode>& codes,
 	vector<Fixup>& fixup, unordered_map<elem,uint>& string_position,
 	vector<u8>& output)
@@ -580,6 +620,7 @@ void huffmunch_tree_build_node_s(const HuffTree& tree, const HuffNode* node, con
 		uint emit = s.size();
 
 		elem suffix = best_suffix(e,2,symbols,tree.visited);
+		uint replen = 0;
 
 		if (emit == 1)
 		{
@@ -588,20 +629,43 @@ void huffmunch_tree_build_node_s(const HuffTree& tree, const HuffNode* node, con
 		}
 		else
 		{
-			if (suffix != EMPTY)
+			Symrep symrep = symreps[e];
+			uint repsave = symrep.first * symrep.second;
+
+			uint sufsave = 0;
+			if (suffix != EMPTY) sufsave = symbols[suffix].size();
+
+			if (suffix != EMPTY || repsave > 2)
 			{
-				assert(symbols[suffix].size() < s.size());
-				emit = s.size() - symbols[suffix].size();
-				output.push_back(2); // 2 prefix signifies string with suffix
+				if (repsave > sufsave)
+				{
+					uint repeats = symrep.second + 1;
+					replen = symrep.first;
+
+					output.push_back(254);
+
+					emit = s.size() - repsave;
+					assert (emit > 0 && emit < 256);
+					output.push_back(emit);
+
+					assert (repeats >= 2 && repeats < 256);
+					output.push_back(repeats);
+				}
+				else
+				{
+					assert (symbols[suffix].size() < s.size());
+					emit = s.size() - symbols[suffix].size();
+					output.push_back(2); // 2 prefix signifies string with suffix
+					assert (emit > 0 && emit < 256);
+					output.push_back(emit);
+				}
 			}
 			else
 			{
 				output.push_back(1); // 1 prefix signifies string
+				assert (emit > 0 && emit < 256);
+				output.push_back(emit);
 			}
-
-			// emitted string length (if not 1)
-			assert (emit > 0 && emit < 256);
-			output.push_back(emit);
 		}
 
 		// emit the string
@@ -611,8 +675,13 @@ void huffmunch_tree_build_node_s(const HuffTree& tree, const HuffNode* node, con
 			output.push_back(u8(s[i]));
 		}
 
-		// placeholder 16-bit reference for suffix, to be fixed up later
-		if (suffix != EMPTY)
+		if (replen > 0) // repeated suffix length
+		{
+			assert (replen > 0 && replen < 256);
+			output.push_back(replen);
+			DEBUG_OUT(DBT,"-%dr%d",replen,symreps[e].second+1);
+		}
+		else if (suffix != EMPTY) // placeholder 16-bit reference for suffix, to be fixed up later
 		{
 			Fixup f = { output.size(), suffix };
 			fixup.push_back(f);
@@ -636,8 +705,8 @@ void huffmunch_tree_build_node_s(const HuffTree& tree, const HuffNode* node, con
 	assert(node->c1 != NULL);
 
 	// determine size of 2 branches
-	uint ta = huffmunch_tree_bytes_node_s(tree, node->c0, symbols);
-	uint tb = huffmunch_tree_bytes_node_s(tree, node->c1, symbols);
+	uint ta = huffmunch_tree_bytes_node_s(tree, node->c0, symbols, symreps);
+	uint tb = huffmunch_tree_bytes_node_s(tree, node->c1, symbols, symreps);
 
 	// put lowest branch on left
 	const HuffNode* na = node->c0;
@@ -672,21 +741,21 @@ void huffmunch_tree_build_node_s(const HuffTree& tree, const HuffNode* node, con
 	uint pa = output.size(); // position of left branch
 	uint pb = pa + ta; // position of right branch
 
-	huffmunch_tree_build_node_s(tree, na, symbols, depth+1, (code<<1)|0, codes, fixup, string_position, output);
+	huffmunch_tree_build_node_s(tree, na, symbols, symreps, depth+1, (code<<1)|0, codes, fixup, string_position, output);
 	assert (output.size() == pb); // verify huffmunch_tree_bytes_node_s size precalculation
-	huffmunch_tree_build_node_s(tree, nb, symbols, depth+1, (code<<1)|1, codes, fixup, string_position, output);
+	huffmunch_tree_build_node_s(tree, nb, symbols, symreps, depth+1, (code<<1)|1, codes, fixup, string_position, output);
 	assert (output.size() == pb+tb); // verify huffmunch_tree_bytes_node_s size precalculation
 
-	assert ((output.size() - p0) == huffmunch_tree_bytes_node_s(tree,node,symbols));
+	assert ((output.size() - p0) == huffmunch_tree_bytes_node_s(tree,node,symbols, symreps));
 }
 
-void huffmunch_tree_build_s(const HuffTree& tree, const vector<Stri>& symbols, unordered_map<elem,HuffCode>& codes, vector<u8>& output)
+void huffmunch_tree_build_s(const HuffTree& tree, const vector<Stri>& symbols, const vector<Symrep>& symreps, unordered_map<elem,HuffCode>& codes, vector<u8>& output)
 {
 	uint tree_pos = output.size();
 
 	vector<Fixup> fixup;
 	unordered_map<elem,uint> string_position;
-	huffmunch_tree_build_node_s(tree, tree.head, symbols, 0, 0, codes, fixup, string_position, output);
+	huffmunch_tree_build_node_s(tree, tree.head, symbols, symreps, 0, 0, codes, fixup, string_position, output);
 
 	for (Fixup f : fixup)
 	{
@@ -700,7 +769,7 @@ void huffmunch_tree_build_s(const HuffTree& tree, const vector<Stri>& symbols, u
 		output[f.position+1] = link >> 8;
 	}
 
-	assert((output.size()-tree_pos) == huffmunch_tree_bytes_s(tree, symbols));
+	assert((output.size()-tree_pos) == huffmunch_tree_bytes_s(tree, symbols, symreps));
 }
 
 // unpacks packed into unpacked, false on error
@@ -775,6 +844,7 @@ bool huffmunch_decode_s(const vector<u8>& packed, Stri& unpacked)
 
 				// read next node header
 				skip = packed[pos]; ++pos;
+				if (skip == 254) break; // repeat stuffix node
 				if (skip == 255)
 				{
 					skip = (packed[pos+0] + (packed[pos+1]<<8)) - 2; pos += 2;
@@ -784,13 +854,21 @@ bool huffmunch_decode_s(const vector<u8>& packed, Stri& unpacked)
 
 			DEBUG_OUT(DBV,"decode: %d/%d [",b,d);
 			uint slen = 1;
+			u8 repeats = 0;
 			while (slen > 0)
 			{
-				if (skip > 0)
+				if (skip == 254)
+				{
+					slen = packed[pos]; ++pos;
+					repeats = packed[pos]; ++pos;
+					--repeats;
+				}
+				else if (skip > 0)
 				{
 					slen = packed[pos]; ++pos;
 				}
 			
+			repeat:
 				while (slen > 0)
 				{
 					elem c = packed[pos]; ++pos;
@@ -799,6 +877,13 @@ bool huffmunch_decode_s(const vector<u8>& packed, Stri& unpacked)
 					--length;
 					--slen;
 				}
+				if (repeats > 0)
+				{
+					--repeats;
+					slen = packed[pos];
+					pos -= slen;
+					goto repeat;
+				}
 
 				if (skip == 2)
 				{
@@ -806,7 +891,7 @@ bool huffmunch_decode_s(const vector<u8>& packed, Stri& unpacked)
 					pos = suffix_pos;
 					DEBUG_OUT(DBV,"(%04X),",pos);
 					skip = packed[pos]; ++pos;
-					if (skip > 2)
+					if (skip > 2 && skip != 254)
 					{
 						DEBUG_OUT(DBV," --- Invalid suffix?\n");
 						return false;
@@ -849,8 +934,10 @@ void huffmunch_tree_bytes_node_c(const HuffNode* node, uint depth, vector<uint>&
 	huffmunch_tree_bytes_node_c(node->c1, depth+1, leaf_count);
 }
 
-uint huffmunch_tree_bytes_c(const HuffTree& tree, const vector<Stri>& symbols)
+uint huffmunch_tree_bytes_c(const HuffTree& tree, const vector<Stri>& symbols, const vector<Symrep>& symreps)
 {
+	assert(symbols.size() == symreps.size());
+
 	uint bytes = 0;
 
 	// generate the leaf count list
@@ -876,17 +963,24 @@ uint huffmunch_tree_bytes_c(const HuffTree& tree, const vector<Stri>& symbols)
 		static_assert(MAX_SYMBOL_SIZE <= 255, "huffmunch tree data structure does not support leaf strings longer than 255 bytes.");
 		assert(s.size() <= MAX_SYMBOL_SIZE);
 
-		// search for potential suffix strings
+		// 1 byte length, string
+		uint best = 1 + s.size();
+
+		// 0, 0, 1 byte length, 1 byte repeat count, string, 1 byte repeat length
+		Symrep symrep = symreps[j];
+		uint repsave = symrep.first * symrep.second;
+		if (repsave > 4) best = 5 + s.size() - repsave;
+
+		// 0, 1 byte length, string, 2 byte suffix pointer
 		elem suffix = best_suffix(j,3,symbols,tree.visited);
 		if (suffix != EMPTY)
 		{
-			// 0 to indicate suffix, 1 byte length, prefix, 16-bit reference
-			bytes += 1 + 1 + (s.size() - symbols[suffix].size()) + 2;
-			continue;
+			uint sufsize = 4 + s.size() - symbols[suffix].size();
+			if (sufsize < best) best = sufsize;
 		}
 
 		// 1 byte length, string
-		bytes += 1 + s.size();
+		bytes += best;
 	}
 	if (symbol_count > MAX_CANONICAL_SYMBOLS) throw runtime_error("Huffman tree has unexpectedly large number of symbols!");
 
@@ -917,7 +1011,7 @@ void huffmunch_tree_build_node_c(const HuffNode* node, uint depth, vector<vector
 	huffmunch_tree_build_node_c(node->c1, depth+1, leaves);
 }
 
-void huffmunch_tree_build_c(const HuffTree& tree, const vector<Stri>& symbols, unordered_map<elem,HuffCode>& codes, vector<u8>& output)
+void huffmunch_tree_build_c(const HuffTree& tree, const vector<Stri>& symbols, const vector<Symrep>& symreps, unordered_map<elem,HuffCode>& codes, vector<u8>& output)
 {
 	uint tree_pos = output.size();
 
@@ -966,25 +1060,61 @@ void huffmunch_tree_build_c(const HuffTree& tree, const vector<Stri>& symbols, u
 			if (debug_bits & DBT) print_stri(s);
 			#endif
 
+			Symrep symrep = symreps[e];
+			uint repsave = symrep.first * symrep.second;
+			uint replen = 0;
+
 			elem suffix = best_suffix(e,3,symbols,tree.visited);
-			if (suffix != EMPTY)
+
+			if (suffix != EMPTY || repsave > 4)
 			{
-				assert(symbols[suffix].size() < s.size());
-				emit = s.size() - symbols[suffix].size();
-				output.push_back(0); // 0 prefix signifies string with suffix
+				uint sufsave = 0;
+				if (suffix != EMPTY) sufsave = symbols[suffix].size();
+
+				if (repsave >= (sufsave + 1))
+				{
+					uint repeats = symrep.second + 1;
+					replen = symrep.first;
+
+					output.push_back(0);
+					output.push_back(0); // 0,0 prefix signifies string with repeating suffix
+
+					emit = s.size() - repsave;
+					assert (emit > 0 && emit < 256);
+					output.push_back(emit);
+
+					assert (repeats >= 2 && repeats < 256);
+					output.push_back(repeats);
+				}
+				else
+				{
+					output.push_back(0); // 0 prefix signifies string with suffix
+					assert(symbols[suffix].size() < s.size());
+					emit = s.size() - symbols[suffix].size();
+					assert (emit > 0 && emit < 256);
+					output.push_back(emit);
+				}
+			}
+			else // plain string
+			{
+				assert (emit > 0 && emit < 256);
+				output.push_back(emit);
 			}
 
 			// emit the string
-			assert (emit > 0 && emit < 256);
-			output.push_back(emit);
 			for (uint i=0; i<emit; ++i)
 			{
 				assert(s[i]<256);
 				output.push_back(u8(s[i]));
+				DEBUG_OUT(DBT,"-%dr%d",replen,symreps[e].second+1);
 			}
 
-			// placeholder 16-bit reference for suffix, to be fixed up later
-			if (suffix != EMPTY)
+			if (replen > 0) // repeated suffix length
+			{
+				assert (replen > 0 && replen < 256);
+				output.push_back(replen);
+			}
+			else if (suffix != EMPTY) // placeholder 16-bit reference for suffix, to be fixed up later
 			{
 				Fixup f = { output.size(), suffix };
 				fixup.push_back(f);
@@ -1016,7 +1146,7 @@ void huffmunch_tree_build_c(const HuffTree& tree, const vector<Stri>& symbols, u
 		output[f.position+1] = link >> 8;
 	}
 
-	assert((output.size()-tree_pos) == huffmunch_tree_bytes_c(tree, symbols));
+	assert((output.size()-tree_pos) == huffmunch_tree_bytes_c(tree, symbols, symreps));
 }
 
 // unpacks packed into unpacked, false on error
@@ -1122,6 +1252,7 @@ bool huffmunch_decode_c(const vector<u8>& packed, Stri& unpacked)
 				else
 				{
 					slen = packed[pos]; ++pos;
+					if (slen == 0) slen = packed[pos]; ++pos;
 					pos += slen + 2;
 				}
 			}
@@ -1143,8 +1274,16 @@ bool huffmunch_decode_c(const vector<u8>& packed, Stri& unpacked)
 				}
 				else
 				{
+					u8 repeats = 0;
+					bool suffix = true;
 					slen = packed[pos]; ++pos;
-					if (slen < 1) return false; // malformed symbol
+					if (slen == 0)
+					{
+						slen = packed[pos]; ++pos;
+						repeats = packed[pos]; ++pos;
+						suffix = false;
+					}
+				repeat:
 					for (uint i=0; i<slen; ++i)
 					{
 						elem c = packed[pos]; ++pos;
@@ -1152,11 +1291,26 @@ bool huffmunch_decode_c(const vector<u8>& packed, Stri& unpacked)
 						unpacked.push_back(c);
 						--length;
 					}
-					// repeat loop from new suffix string
-					uint suffix_pos = packed[pos+0] + (packed[pos+1] << 8) + table_pos + 1;
-					pos = suffix_pos;
-					remains = true;
-					DEBUG_OUT(DBV,"(%d),",pos);
+					if (repeats > 1)
+					{
+						slen = packed[pos];
+						pos -= slen;
+						--repeats;
+						DEBUG_OUT(DBV,"R,");
+						goto repeat;
+					}
+
+					if (suffix)
+					{
+						uint suffix_pos = packed[pos+0] + (packed[pos+1] << 8) + table_pos + 1;
+						pos = suffix_pos;
+						remains = true;
+						DEBUG_OUT(DBV,"(%d),",pos);
+					}
+					else
+					{
+						remains = false;
+					}
 				}
 			}
 			DEBUG_OUT(DBV,"]\n");
@@ -1180,8 +1334,8 @@ MunchSize huffmunch_size(const MunchInput& in, bool canonical)
 	huffman_tree(in,tree);
 	size.stream_bits = huffman_tree_bits(tree);
 	size.table_bytes = !canonical ?
-		huffmunch_tree_bytes_s(tree, in.symbols) :
-		huffmunch_tree_bytes_c(tree, in.symbols);
+		huffmunch_tree_bytes_s(tree, in.symbols, in.symreps) :
+		huffmunch_tree_bytes_c(tree, in.symbols, in.symreps);
 	return size;
 }
 
@@ -1199,11 +1353,13 @@ MunchInput huffmunch_munch(const Stri& data, bool canonical)
 		if (v > n) n = v;
 	}
 	best.symbols.clear();
+	best.symreps.clear();
 	for (elem i=0; i<=n; ++i)
 	{
 		Stri s;
 		s.push_back(i);
 		best.symbols.push_back(s);
+		best.symreps.push_back(repeating_suffix(s));
 	}
 	MunchSize best_size = huffmunch_size(best, canonical);
 
@@ -1282,7 +1438,7 @@ MunchInput huffmunch_munch(const Stri& data, bool canonical)
 				(get<0>(a) < get<0>(b)) : // favour more bytes saved
 				(get<1>(a) > get<1>(b)) ; // otherwise favour shorter strings
 		};
-		priority_queue<Task, std::vector<Task>, decltype(task_less)> task_queue(task_less);
+		priority_queue<Task, vector<Task>, decltype(task_less)> task_queue(task_less);
 		task_queue.empty();
 
 		for (uint ss=2; ss<=step_size; ++ss)
@@ -1354,8 +1510,10 @@ MunchInput huffmunch_munch(const Stri& data, bool canonical)
 
 				// add a new symbol to the tree
 				next.symbols = best.symbols;
+				next.symreps = best.symreps;
 				elem n = next.symbols.size();
 				next.symbols.push_back(next_symbol);
+				next.symreps.push_back(repeating_suffix(next_symbol));
 
 				// create the data, replacing the matched string with the new symbol
 				next.data.reserve(best.data.size());
@@ -1515,8 +1673,8 @@ int huffmunch_compress(
 
 		huffman_tree(best, tree);
 		!canonical ?
-			huffmunch_tree_build_s(tree, best.symbols, codes, packed) :
-			huffmunch_tree_build_c(tree, best.symbols, codes, packed);
+			huffmunch_tree_build_s(tree, best.symbols, best.symreps, codes, packed) :
+			huffmunch_tree_build_c(tree, best.symbols, best.symreps, codes, packed);
 		huffman_encode(codes, best.data, packed, packed_splits);
 
 		DEBUG_OUT(DBH,"split_count: %d\n",split_count);

@@ -10,9 +10,9 @@
 .segment "ZEROPAGE"
 
 .exportzp huffmunch_zpblock
-huffmunch_zpblock: .res 9
+huffmunch_zpblock: .res 10
 .ifdef CANONICAL
-	.res 24-9 ; canonical requires more RAM
+	.res 25-10 ; canonical requires more RAM
 .endif
 
 .segment "RODATA"

@@ -15,9 +15,10 @@ hm_node   = <(huffmunch_zpblock + 0); pointer to current node of tree
 hm_stream = <(huffmunch_zpblock + 2) ; pointer to bitstream
 hm_tree   = <(huffmunch_zpblock + 4) ; pointer to tree base
 hm_byte   = <(huffmunch_zpblock + 6) ; current byte of bitstream
-hm_status = <(huffmunch_zpblock + 7) ; bits 0-2 = bits left in hm_byte, bit 7 = string with suffix
+hm_status = <(huffmunch_zpblock + 7) ; bits 0-2 = bits left in hm_byte, bit 7 = suffix, bit 6 = repeat
 hm_length = <(huffmunch_zpblock + 8) ; bytes left in current string
-.assert (huffmunch_zpblock + 9) <= 256, error, "huffmunch_zpblock requires 9 bytes on zero page"
+hm_repeat = <(huffmunch_zpblock + 9) ; repetitions left in current string
+.assert (huffmunch_zpblock + 10) <= 256, error, "huffmunch_zpblock requires 10 bytes on zero page"
 
 ; NOTE: only hm_node and hm_stream need to be on ZP
 ;       the rest could go elsewhere, but still recommended for ZP
@@ -116,6 +117,7 @@ hm_length = <(huffmunch_zpblock + 8) ; bytes left in current string
 	sta hm_byte ; hm_byte doesn't need initialization, just for consistency
 	sta hm_status
 	sta hm_length
+	sta hm_repeat
 	rts
 .endproc
 
@@ -131,12 +133,32 @@ emit_byte:
 		inc hm_node+1
 	:
 	rts
+repeat_suffix:
+	; Y = 0
+	dec hm_repeat
+	beq repeat_finished
+	lda (hm_node), Y
+	sta hm_length
+	lda hm_node+0
+	sec
+	sbc hm_length
+	sta hm_node+0
+	lda hm_node+1
+	sbc #0
+	sta hm_node+1
+	jmp emit_byte
+repeat_finished:
+	lda hm_status
+	and #$B7
+	sta hm_status
+	jmp walk_tree
 string_empty:
 	; hm_length = 0
 	; Y = 0
 	bit hm_status
+	bvs repeat_suffix
 	bpl walk_tree
-	; follow suffix
+follow_suffix:
 	lda (hm_node), Y
 	clc
 	adc hm_tree+0
@@ -150,7 +172,7 @@ string_empty:
 	lda (hm_node), Y
 	iny
 	cmp #2
-	beq leaf2
+	bcs leaf2_254
 	tax
 	lda hm_status
 	and #$7F ; clear high bit, no more suffix
@@ -167,6 +189,9 @@ leaf0:
 	rts
 leaf1:
 	; hm_status high bit is clear (no suffix)
+leaf2_254:
+	cmp #254
+	beq leaf254
 leaf2:
 	; hm_status high bit is set (suffix) if leaf2
 	; Y = 1
@@ -179,6 +204,25 @@ leaf2:
 	bcc :+
 		inc hm_node+1
 	:
+	dey
+	jmp emit_byte
+leaf254:
+	; Y = 1
+	lda (hm_node), Y
+	sta hm_length ; length must be > 0
+	iny
+	lda (hm_node), Y
+	sta hm_repeat ; repeat must be > 1
+	lda hm_node+0
+	clc
+	adc #3
+	sta hm_node+0
+	bcc :+
+		inc hm_node+1
+	:
+	lda hm_status
+	ora #$40
+	sta hm_status
 	ldy #0
 	jmp emit_byte
 walk_tree:
@@ -210,7 +254,9 @@ node2:
 	jmp leaf2
 node3:
 	; Y = 0
-	tax ; x = 3-255
+	cmp #254
+	beq leaf254
+	tax ; x = 3-253
 	; read bit
 	lda hm_status
 	bne :+

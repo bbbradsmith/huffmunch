@@ -81,11 +81,22 @@ After emitting the byte string contained in this leaf, jump to the new leaf and 
 4. WORD - offset to another leaf, relative to head of tree
 
 
-Node 3-254: short branch
+Node 254: leaf, string with repeating suffix
+After reaching the end of the base string, rewind by the repeating suffix length,
+and repeat that suffix as many times as specified.
+
+1. BYTE - 254
+2. BYTE - length of base string (1-255)
+3. BYTE - number of repetitions of the suffix (2-255)
+4. BYTE x length - base string to emit
+5. BYTE - length of repeated suffix 
+
+
+Node 3-253: short branch
 This node branches to two other nodes, selected by the next bit in the bitstream.
 The left branch is taken by a 0, and the right branch by a 1.
 
-1. BYTE - 3-254 offset to right node
+1. BYTE - 3-253 offset to right node
 
 The left node begins at this node + 1.
 The right node begins at this node + offset.
@@ -117,16 +128,23 @@ and how many leaves are present at each level.
 
 
 Following the tree description is a table of output strings in canonical order.
-There are two types of strings:
+There are three types of strings:
 
 
 1. BYTE - 1-255 - length of string
 2. Bytes x length - bytes to emit
 
 1. BYTE - 0
-2. BYTE - length of prefix
+2. BYTE - 1-255 length of prefix
 3. BYTE x length - bytes to emit
 4. WORD - offset to another string, relative to start of tree data + 1 byte
+
+1. BYTE - 0
+2. BYTE - 0
+3. BYTE - 1-255 length of base string
+4. BYTE - 2-255 number of repetitions of the suffix
+5. BYTE x length - base string to emit
+6. BYTE - 1-255 length of repeated suffix
 
 The suffix offsets are relative to the second byte of the tree data,
 since the depth is actually ignored during decoder. (For correct data,
