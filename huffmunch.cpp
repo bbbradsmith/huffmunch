@@ -574,7 +574,7 @@ uint huffmunch_tree_bytes_node_s(const HuffTree& tree, const HuffNode* node, con
 	uint tmin = min(ta,tb); // smaller node goes on left
 	uint skip = tmin + 1; // skip distance is left node + 1 byte to store the distance
 	assert (skip >= 3); // leaf must be at least 2 bytes
-	if (skip < 255) return 1 + ta + tb;
+	if (skip < 254) return 1 + ta + tb;
 	// skip distance is longer: stored as 255 + 2 bytes
 	if ((skip+2) >= (1<<16)) throw runtime_error("Huffman tree branch unexpectedly large!");
 	return 3 + ta + tb;
@@ -725,7 +725,7 @@ void huffmunch_tree_build_node_s(const HuffTree& tree, const HuffNode* node,
 	uint p0 = output.size();
 	uint skip = ta + 1; // minimum leaf or subtree size is 2, +1 for this node's byte
 	assert(skip >= 3); // ta should never be less than 2 (single byte string leaf)
-	if (skip < 255)
+	if (skip < 254)
 	{
 		output.push_back(skip);
 	}
@@ -821,6 +821,7 @@ bool huffmunch_decode_s(const vector<u8>& packed, Stri& unpacked)
 			DEBUG_OUT(DBV,"read: ");
 
 			uint skip = packed[pos]; ++pos;
+			if (skip == 254) goto leaf;
 			if (skip == 255)
 			{
 				skip = (packed[pos+0] + (packed[pos+1]<<8)) - 2; pos += 2;
@@ -844,12 +845,13 @@ bool huffmunch_decode_s(const vector<u8>& packed, Stri& unpacked)
 
 				// read next node header
 				skip = packed[pos]; ++pos;
-				if (skip == 254) break; // repeat stuffix node
+				if (skip == 254) break; // repeat suffix node
 				if (skip == 255)
 				{
 					skip = (packed[pos+0] + (packed[pos+1]<<8)) - 2; pos += 2;
 				}
 			};
+		leaf:
 			DEBUG_OUT(DBV,"\n");
 
 			DEBUG_OUT(DBV,"decode: %d/%d [",b,d);
@@ -874,6 +876,11 @@ bool huffmunch_decode_s(const vector<u8>& packed, Stri& unpacked)
 					elem c = packed[pos]; ++pos;
 					DEBUG_OUT(DBV,"%02X,",c);
 					unpacked.push_back(c);
+					if (length < 1)
+					{
+						DEBUG_OUT(DBV, " --- End of data reached prematurely?\n");
+						return false;
+					}
 					--length;
 					--slen;
 				}
@@ -1106,13 +1113,13 @@ void huffmunch_tree_build_c(const HuffTree& tree, const vector<Stri>& symbols, c
 			{
 				assert(s[i]<256);
 				output.push_back(u8(s[i]));
-				DEBUG_OUT(DBT,"-%dr%d",replen,symreps[e].second+1);
 			}
 
 			if (replen > 0) // repeated suffix length
 			{
 				assert (replen > 0 && replen < 256);
 				output.push_back(replen);
+				DEBUG_OUT(DBT,"-%dr%d",replen,symreps[e].second+1);
 			}
 			else if (suffix != EMPTY) // placeholder 16-bit reference for suffix, to be fixed up later
 			{
@@ -1252,8 +1259,15 @@ bool huffmunch_decode_c(const vector<u8>& packed, Stri& unpacked)
 				else
 				{
 					slen = packed[pos]; ++pos;
-					if (slen == 0) slen = packed[pos]; ++pos;
-					pos += slen + 2;
+					if (slen == 0) // repeating suffix
+					{
+						slen = packed[pos]; ++pos;
+						pos += slen + 2;
+					}
+					else // link suffix
+					{
+						pos += slen + 2;
+					}
 				}
 			}
 			// emit symbol
@@ -1268,6 +1282,11 @@ bool huffmunch_decode_c(const vector<u8>& packed, Stri& unpacked)
 						elem c = packed[pos]; ++pos;
 						DEBUG_OUT(DBV,"%02X,",c);
 						unpacked.push_back(c);
+						if (length < 1)
+						{
+							DEBUG_OUT(DBV, " --- End of data reached prematurely?\n");
+							return false;
+						}
 						--length;
 					}
 					remains = false; // no suffix
@@ -1289,6 +1308,11 @@ bool huffmunch_decode_c(const vector<u8>& packed, Stri& unpacked)
 						elem c = packed[pos]; ++pos;
 						DEBUG_OUT(DBV,"%02X,",c);
 						unpacked.push_back(c);
+						if (length < 1)
+						{
+							DEBUG_OUT(DBV, " --- End of data reached prematurely?\n");
+							return false;
+						}
 						--length;
 					}
 					if (repeats > 1)

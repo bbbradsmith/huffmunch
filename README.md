@@ -5,7 +5,6 @@ A practical generic lossless compression library for the NES or other 6502 platf
 Work in progress version with RLE encoding added to the tree structure.
 
 TODO:
-* Canonical not implemented correctly yet, breaks on some of my tests
 * Verify 6502 decompressor (use CHR test instead of danger)
 * Compressor should identify biggest RLE and add it as an estimate on each pass.
 * Measure performance, update stats below, etc.
