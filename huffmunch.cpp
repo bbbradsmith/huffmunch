@@ -796,6 +796,11 @@ bool huffmunch_decode_s(const vector<u8>& packed, Stri& unpacked)
 					elem c = packed[pos]; ++pos;
 					DEBUG_OUT(DBV,"%02X,",c);
 					unpacked.push_back(c);
+					if (length < 1)
+					{
+						DEBUG_OUT(DBV, " --- End of data reached prematurely?\n");
+						return false;
+					}
 					--length;
 					--slen;
 				}
@@ -1137,6 +1142,11 @@ bool huffmunch_decode_c(const vector<u8>& packed, Stri& unpacked)
 						elem c = packed[pos]; ++pos;
 						DEBUG_OUT(DBV,"%02X,",c);
 						unpacked.push_back(c);
+						if (length < 1)
+						{
+							DEBUG_OUT(DBV, " --- End of data reached prematurely?\n");
+							return false;
+						}
 						--length;
 					}
 					remains = false; // no suffix
@@ -1150,6 +1160,11 @@ bool huffmunch_decode_c(const vector<u8>& packed, Stri& unpacked)
 						elem c = packed[pos]; ++pos;
 						DEBUG_OUT(DBV,"%02X,",c);
 						unpacked.push_back(c);
+						if (length < 1)
+						{
+							DEBUG_OUT(DBV, " --- End of data reached prematurely?\n");
+							return false;
+						}
 						--length;
 					}
 					// repeat loop from new suffix string
