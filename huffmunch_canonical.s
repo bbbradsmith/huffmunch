@@ -155,7 +155,7 @@ hm_repeat  = <(huffmunch_zpblock + 24) ; repeated string length
 	clc
 	adc hm_strings+0
 	sta hm_strings+0
-	bne :+
+	bcc :+
 		inc hm_strings+1
 	:
 	; 11. initialize other data [ready]
