@@ -1482,6 +1482,53 @@ MunchInput huffmunch_munch(const Stri& data, bool canonical)
 			}
 		}
 
+		// add the current best RLE to the queue
+
+		elem best_run = EMPTY;
+		uint best_run_repeats = 0;
+		uint best_run_savings = 0;
+		for (uint i=0; i<best.data.size(); ++i)
+		{
+			uint run_start = i;
+			elem e = best.data[i];
+			while ((i+1) < best.data.size() && best.data[i+1] == e) ++i;
+			uint run_length = i - run_start;
+			if (run_length > 1 && e != EMPTY)
+			{
+				// this isn't the most accurate estimate,
+				// but it only has to be an estimate
+				uint symbol_length = best.symbols[e].size();
+				uint count = 1;
+				if ((run_length * symbol_length) >= MAX_SYMBOL_SIZE)
+				{
+					// if too long to fit in MAX_SYMBOL_SIZE, cut it down,
+					// and see if it fits more than once
+					uint new_run_length = MAX_SYMBOL_SIZE / symbol_length;
+					if (new_run_length > 1) count = run_length / new_run_length;
+					run_length = new_run_length;
+				}
+				uint savings = (run_length-1) * symbol_length * count;
+				if (savings > best_run_savings && run_length > 1)
+				{
+					best_run = e;
+					best_run_repeats = run_length;
+					best_run_savings = savings;
+				}
+				else if (best_run == e && run_length >= best_run_repeats)
+				{
+					// this may over-estimate a repeated run over
+					// a better single-instance run, but eventually both
+					// will likely get tried anyway.
+					best_run_savings += savings;
+				}
+			}
+		}
+		if (best_run != EMPTY)
+		{
+			Task task = Task(best_run_savings, ~0, 0); // symbol length ~0 = best RLE
+			task_queue.push(task);
+		}
+
 		// trial each task in order of priority
 
 		minima = true;
@@ -1495,18 +1542,27 @@ MunchInput huffmunch_munch(const Stri& data, bool canonical)
 			const uint bsave = get<0>(task);
 			const uint si = get<1>(task);
 			const elem hash = get<2>(task);
-			const uint su = si+1;
+			uint su = si+1;
 			const uint ss = si+2;
 
 			// hashes can have collisions, so find all strings with this hash
 			hash_strings.clear();
-			for (uint i=su; i<rk[si].size(); ++i)
+			if (si != ~0)
 			{
-				if (rk[si][i] == hash)
+				for (uint i=su; i<rk[si].size(); ++i)
 				{
-					Stri s = Stri(best.data.c_str()+i,ss);
-					hash_strings.insert(s);
+					if (rk[si][i] == hash)
+					{
+						Stri s = Stri(best.data.c_str()+i,ss);
+						hash_strings.insert(s);
+					}
 				}
+			}
+			else // RLE candidate
+			{
+				Stri s;
+				for (uint i=0; i<best_run_repeats; ++i) s.push_back(best_run);
+				hash_strings.insert(s);
 			}
 
 			// try each of these strings
@@ -1517,7 +1573,7 @@ MunchInput huffmunch_munch(const Stri& data, bool canonical)
 				Stri next_symbol = best.symbols[s[0]];
 				for (uint i=1; i<s.size(); ++i)
 					next_symbol = next_symbol + best.symbols[s[i]];
-				if (next_symbol.size() >= MAX_SYMBOL_SIZE) continue;
+				if (next_symbol.size() > MAX_SYMBOL_SIZE) continue;
 				// really MAX_SYMBOL_SIZE applies to the finished tree symbol, which could be shortened as a prefix
 				// but it's probably "good enough" to enforce this here instead.
 
@@ -1541,23 +1597,40 @@ MunchInput huffmunch_munch(const Stri& data, bool canonical)
 
 				// create the data, replacing the matched string with the new symbol
 				next.data.reserve(best.data.size());
-				uint i=0;
-				for (; i<rk[si].size(); ++i)
+				if (si != ~0)
 				{
-					const elem o = best.data[i];
-					if(rk[si][i] == hash && Stri(best.data.c_str()+i,ss) == s)
+					uint i=0;
+					for (; i<rk[si].size(); ++i)
 					{
-						next.data.push_back(n);
-						i += su;
+						const elem o = best.data[i];
+						if(rk[si][i] == hash && Stri(best.data.c_str()+i,ss) == s)
+						{
+							next.data.push_back(n);
+							i += su;
+						}
+						else
+						{
+							next.data.push_back(o);
+						}
 					}
-					else
+					for (; i < best.data.size(); ++i) // trailing bytes of the last unmatched symbol
 					{
-						next.data.push_back(o);
+						next.data.push_back(best.data[i]);
 					}
 				}
-				for (; i < best.data.size(); ++i) // trailing bytes of the last unmatched symbol
+				else // RLE replacement
 				{
-					next.data.push_back(best.data[i]);
+					su = 0;
+					size_t pos = 0;
+					next.data = best.data;
+					while (true)
+					{
+						pos = next.data.find(s,pos);
+						if (pos == string::npos) break;
+						next.data.replace(pos, s.size(), s);
+						++su;
+						pos += s.size();
+					}
 				}
 
 				last_symbol = next_symbol;

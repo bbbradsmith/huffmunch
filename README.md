@@ -2,12 +2,15 @@
 
 A practical generic lossless compression library for the NES or other 6502 platforms.
 
-Work in progress version with RLE encoding added to the tree structure.
+This branch experimented with adding an RLE leaf type to the dictionary tree structure.
+While this did improve compression for a pathological RLE case,
+it didn't really significantly improve any of my more natural tests.
+Most of them did not outweigh the increased code size, and there is also
+another byte of RAM to justify.
 
-TODO:
-* Verify 6502 decompressor (use CHR test instead of danger)
-* Compressor should identify biggest RLE and add it as an estimate on each pass.
-* Measure performance, update stats below, etc.
+CPU performance was roughly the same, at least.
+
+Preserving the branch, but I consider this another dead end experiment.
 
 ## Usage
 
@@ -122,11 +125,11 @@ The performance of this compression method is measured here on the
  either more common or longer will spend less time traversing the
  huffman tree structure that compresses the data.
 
-| Method       | Average Speed    | Code Size | RAM Required  | Compressed Data Size |
-| ------------ | ---------------- | --------- | ------------- | -------------------- |
-| Uncompressed |   26 cycles/byte |  10 bytes |      2 bytes  | 45418 bytes (100.0%) |
-| Standard     |  260 cycles/byte | 330 bytes |      9 bytes  | 21520 bytes (47.69%) |
-| Canonical    | 1000 cycles/byte | 578 bytes |     24 bytes  | 20751 bytes (45.99%) |
+| Method       | Average Speed     | Code Size | RAM Required  | Compressed Data Size  |
+| ------------ | ----------------- | --------- | ------------- | --------------------- |
+| Uncompressed |    26 cycles/byte |  10 bytes |      2 bytes  |  45418 bytes (100.0%) |
+| Standard     |  ~260 cycles/byte | 408 bytes |     10 bytes  | ~21520 bytes (47.69%) |
+| Canonical    | ~1000 cycles/byte | 713 bytes |     25 bytes  | ~20751 bytes (45.99%) |
 
 The compressed size performance will also vary a lot depending on
  the type of data used. Plain text seems to regularly do better
