@@ -17,14 +17,14 @@ hm_tree    = <(huffmunch_zpblock + 4) ; pointer to tree base + 1
 hm_byte    = <(huffmunch_zpblock + 6) ; current byte of bitstream
 hm_status  = <(huffmunch_zpblock + 7) ; bits 0-2 = bits left in hm_byte, bit 7 = string with suffix
 hm_length  = <(huffmunch_zpblock + 8) ; bytes left in current string
-hm_strings = <(huffmunch_zpblock + 10) ; pointer to string table
-hm_fc      = <(huffmunch_zpblock + 12) ; first code at current depth (24-bit)
-hm_c       = <(huffmunch_zpblock + 15) ; current code (24-bit)
-hm_dc      = <(huffmunch_zpblock + 18) ; depth-relative code (16-bit)
-hm_ds      = <(huffmunch_zpblock + 20) ; string count at current depth (16-bit)
-hm_s       = <(huffmunch_zpblock + 22) ; current string reached (16-bit)
+hm_strings = <(huffmunch_zpblock + 9) ; pointer to string table
+hm_fc      = <(huffmunch_zpblock + 11) ; first code at current depth (24-bit)
+hm_c       = <(huffmunch_zpblock + 14) ; current code (24-bit)
+hm_dc      = <(huffmunch_zpblock + 17) ; depth-relative code (16-bit)
+hm_ds      = <(huffmunch_zpblock + 19) ; string count at current depth (16-bit)
+hm_s       = <(huffmunch_zpblock + 21) ; current string reached (16-bit)
 
-.assert (huffmunch_zpblock + 24) <= 256, error, "huffmunch_zpblock requires 24 bytes on zero page"
+.assert (huffmunch_zpblock + 23) <= 256, error, "huffmunch_zpblock requires 24 bytes on zero page"
 
 ; NOTE: only hm_node and hm_stream need to be on ZP
 ;       the rest could go elsewhere, but still recommended for ZP

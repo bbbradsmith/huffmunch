@@ -50,7 +50,7 @@ music_on:   .res 1
 .exportzp huffmunch_zpblock
 huffmunch_zpblock: .res 9
 .ifdef CANONICAL
-	.res 24-9 ; canonical requires more RAM
+	.res 23-9 ; canonical requires more RAM
 .endif
 
 .segment "RAM"
