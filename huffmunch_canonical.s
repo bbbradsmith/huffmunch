@@ -154,7 +154,7 @@ hm_s       = <(huffmunch_zpblock + 22) ; current string reached (16-bit)
 	clc
 	adc hm_strings+0
 	sta hm_strings+0
-	bne :+
+	bcc :+
 		inc hm_strings+1
 	:
 	; 11. initialize other data [ready]
