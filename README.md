@@ -12,6 +12,10 @@ CPU performance was roughly the same, at least.
 
 Preserving the branch, but I consider this another dead end experiment.
 
+The RLE prepass experiment branch did better at compressing RLE,
+with simpler code, but unfortunately made most test cases a little bit
+more worse, probably as a direct result of being more effective at RLE.
+
 ## Usage
 
 ### Compression
