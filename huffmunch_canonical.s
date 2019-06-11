@@ -274,6 +274,7 @@ leaf0_repeat:
 		inc hm_node+1
 	:
 	lda hm_status
+	and #$7F ; clear any previous suffix
 	ora #$40
 	sta hm_status
 	ldy #0
@@ -438,7 +439,7 @@ skip0: ; after 0, skip number of bytes + 4
 	:
 	dey
 	jmp skip_finish
-skip0_repeat: ; after 0, 0, skip number of bytes + 6
+skip0_repeat: ; after 0, 0, skip number of bytes + 5
 	iny
 	lda (hm_node), Y
 	clc
@@ -449,7 +450,7 @@ skip0_repeat: ; after 0, 0, skip number of bytes + 6
 	:
 	lda hm_node+0
 	clc
-	adc #6
+	adc #5
 	sta hm_node+0
 	bcc :+
 		inc hm_node+1

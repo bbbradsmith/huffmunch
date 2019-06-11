@@ -679,7 +679,7 @@ void huffmunch_tree_build_node_s(const HuffTree& tree, const HuffNode* node,
 		{
 			assert (replen > 0 && replen < 256);
 			output.push_back(replen);
-			DEBUG_OUT(DBT,"-%dr%d",replen,symreps[e].second+1);
+			DEBUG_OUT(DBT,"-r%d*%d",replen,symreps[e].second+1);
 		}
 		else if (suffix != EMPTY) // placeholder 16-bit reference for suffix, to be fixed up later
 		{
@@ -1119,7 +1119,7 @@ void huffmunch_tree_build_c(const HuffTree& tree, const vector<Stri>& symbols, c
 			{
 				assert (replen > 0 && replen < 256);
 				output.push_back(replen);
-				DEBUG_OUT(DBT,"-%dr%d",replen,symreps[e].second+1);
+				DEBUG_OUT(DBT,"-r%d*%d",replen,symreps[e].second+1);
 			}
 			else if (suffix != EMPTY) // placeholder 16-bit reference for suffix, to be fixed up later
 			{

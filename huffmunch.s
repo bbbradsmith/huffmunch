@@ -206,6 +206,9 @@ leaf2:
 	:
 	dey
 	jmp emit_byte
+leaf254y0:
+	; Y = 0
+	iny
 leaf254:
 	; Y = 1
 	lda (hm_node), Y
@@ -221,6 +224,7 @@ leaf254:
 		inc hm_node+1
 	:
 	lda hm_status
+	and #$7F ; clear any previous suffix
 	ora #$40
 	sta hm_status
 	ldy #0
@@ -255,7 +259,7 @@ node2:
 node3:
 	; Y = 0
 	cmp #254
-	beq leaf254
+	beq leaf254y0
 	tax ; x = 3-253
 	; read bit
 	lda hm_status
