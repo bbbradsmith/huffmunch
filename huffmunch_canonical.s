@@ -495,6 +495,9 @@ string0_repeat:
 	iny
 	lda (hm_node), Y
 	sta hm_length
+	iny
+	lda (hm_node), Y
+	sta hm_repeat
 	lda hm_status
 	ora #$40
 	sta hm_status
