@@ -2,6 +2,8 @@
 
 A practical generic lossless compression library for the NES or other 6502 platforms.
 
+## Inline RLE experimental branch
+
 This branch experimented with adding an RLE leaf type to the dictionary tree structure.
 While this did improve compression for a pathological RLE case,
 it didn't really significantly improve any of my more natural tests.
