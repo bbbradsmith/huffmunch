@@ -2,6 +2,8 @@
 
 A practical generic compression library for the NES or other 6502 platforms.
 
+## Prepass RLE experimental branch
+
 This branch is testing an experimental Huffmunch + RLE variation with
 applies a simple RLE encoding before compression (or after decompression).
 
