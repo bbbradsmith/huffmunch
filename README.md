@@ -2,6 +2,8 @@
 
 A practical generic compression library for the NES or other 6502 platforms.
 
+## First-Difference experimental branch
+
 This branch experiments with a first-difference pre-pass on the data.
 Each byte of the input will be replaced with the difference between itself
 and the previous byte. This reduces any repeated byte runs to strings of zeroes,
