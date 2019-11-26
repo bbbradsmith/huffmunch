@@ -11,7 +11,7 @@
 ; out: reads 1 byte from stream, result in A (X,Y,flags clobbered)
 .export huffmunch_read
 
-hm_node   = <(huffmunch_zpblock + 0); pointer to current node of tree
+hm_node   = <(huffmunch_zpblock + 0) ; pointer to current node of tree
 hm_stream = <(huffmunch_zpblock + 2) ; pointer to bitstream
 hm_tree   = <(huffmunch_zpblock + 4) ; pointer to tree base
 hm_byte   = <(huffmunch_zpblock + 6) ; current byte of bitstream
