@@ -1,3 +1,11 @@
+This project uses an early prototype of the Lizard Music Engine. It remains here unchanged,
+but if you would like to use this engine for your own project, the current version is recommended.
+
+The current version of the Lizard Music Engine is available here:
+https://github.com/bbbradsmith/lizard_music
+
+
+
 Lizard Music Engine
 ===================
 
