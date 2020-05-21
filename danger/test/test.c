@@ -1,10 +1,9 @@
 /* Unit test for huffmunch, using dangerous game as source. */
 
 #include <stdio.h>
+#include "../../huffmunch_c.h"
 
-extern unsigned int fastcall test_init(void);
-extern unsigned int fastcall test_begin_block(unsigned int index);
-extern unsigned int fastcall test_read_byte(void);
+extern char story[]; // from test.s
 
 #define STORY_FILE "../output/danger.bin"
 
@@ -25,16 +24,16 @@ int main()
 		return 1;
 	}
 
-	block_count = test_init();
+	block_count = huffmunch_init(story);
 	printf("%u blocks to compare against: " STORY_FILE "\n", block_count);
 
 	for (block=0; block<block_count; ++block)
 	{
 		printf("Block %u...", block);
-		block_length = test_begin_block(block);
+		block_length = huffmunch_load(block);
 		for (b=0; b<block_length; ++b)
 		{
-			ca = test_read_byte();
+			ca = huffmunch_read();
 			cb = fgetc(f);
 			if (cb == EOF)
 			{
@@ -44,7 +43,7 @@ int main()
 			}
 			if (ca != cb)
 			{
-				printf(" failed at byte %u! (%02X != %02X)\n", b, ca, cb);
+				printf(" failed at byte %u! (read %02X != expected %02X)\n", b, ca, cb);
 				fclose(f);
 				return 3;
 			}

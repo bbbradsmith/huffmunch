@@ -51,7 +51,13 @@ There are two versions of the decompression library:
 * **huffmunch.s** - standard version
 * **huffmunch_canonical.s** - canonical version (much slower, slightly better compression)
 
+For pure C applications, a wrapper is included:
+
+* **huffmunch_c.h** - wrapper header
+* **huffmunch_c.s** - wrapper implementation
+
 See the **danger** folder for an example NES project.
+See **danger/test** for an example C project.
 
 ## Method
 
