@@ -6,6 +6,6 @@
 
 extern unsigned int fastcall huffmunch_init(void* data); // sets data pointer, returns number of blocks in data
 extern unsigned int fastcall huffmunch_load(unsigned int index); // begins loading a block, returns length of block
-extern unsigned int fastcall huffmunch_read(void); // returns the next byte in the block
+extern unsigned char fastcall huffmunch_read(void); // returns the next byte in the block
 
 #endif

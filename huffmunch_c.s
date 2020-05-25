@@ -6,8 +6,8 @@
 ;   and define EXTERNAL_ZPBLOCK when building this file.
 ;
 ; This is not the default because most platform default CFG has a restricted ZP segment size.
-; This is required for using the canonical version of huffmunch, because there is not enough
-; space in the internal ZP to accomodate the additional required state.
+; EXTERNAL_ZPBLOCK is required for using the canonical version of huffmunch, because there
+; is not enough space in the internal ZP to accomodate the additional required state.
 
 .export _huffmunch_init
 .export _huffmunch_load
