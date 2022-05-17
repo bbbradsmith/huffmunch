@@ -140,9 +140,10 @@ The canonical variation of the technique represents the compression tree structu
 ## Other Reference
 
 Compression of NES CHR graphics tiles is adequate, though I would
- recommend the [donut CHR compressor](https://github.com/jroatch/donut-nes)
- by [jroatch](https://github.com/jroatch) which is slightly more effective
- for that specific purpose.
+ recommend the [donut CHR compressor](https://www.nesdev.org/wiki/User:Ns43110/donut.s)
+ by jroatch, which is slightly more effective for that specific purpose.
+
+Another CHR compressor by Bisqwit and Tokumaru: [tokumaru](https://bisqwit.iki.fi/source/tokumaru.html)
 
 Another useful reference is bregalad's
  [Compress Tools](https://www.romhacking.net/utilities/882/)
