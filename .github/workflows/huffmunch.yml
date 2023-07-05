@@ -16,9 +16,9 @@ jobs:
       - name: Copy source files to artifact
         shell: pwsh
         run: |
-            Copy-Item -Path . -Destination ./artifact -recurse -Force
-            rmdir ./artifact/.git -r -force
-            rmdir ./artifact/.gihtub -r -force
+            Copy-Item -Path . -Destination ${{ runner.temp }}/artifact -recurse -Force
+            rmdir ${{ runner.temp }}/artifact/.git -r -force
+            rmdir ${{ runner.temp }}/artifact/.gihtub -r -force
 
       - name: Add msbuild to PATH
         uses: microsoft/setup-msbuild@v1.1
@@ -30,7 +30,7 @@ jobs:
         shell: pwsh
         run: |
             mkdir ./archive/release
-            copy release/huffmunch.exe artifact/release
+            copy release/huffmunch.exe ${{ runner.temp }}/artifact/release
 
       - name: Test compression
         run: |
@@ -67,4 +67,4 @@ jobs:
         uses: actions/upload-artifact@v3
         with:
           name: huffmunch-build-artifact.zip
-          path: ./artifact
+          path: ${{ runner.temp }}/artifact
