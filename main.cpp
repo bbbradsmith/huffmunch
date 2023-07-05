@@ -11,12 +11,11 @@
 #include <vector>
 
 const int VERSION_MAJOR = 1;
-const int VERSION_MINOR = 4;
+const int VERSION_MINOR = 5;
 
 #include "huffmunch.h"
 
 bool verbose = false;
-bool canonical = false;
 unsigned int header_width = 2;
 
 int huffmunch_file(const char* file_in, const char* file_out)
@@ -50,7 +49,7 @@ int huffmunch_file(const char* file_in, const char* file_out)
 	fclose(f);
 	printf("%6d bytes read from %s\n", size_in, file_in);
 
-	int result = huffmunch_compress(buffer_in, size_in, buffer_out, size_out, NULL, 0, canonical);
+	int result = huffmunch_compress(buffer_in, size_in, buffer_out, size_out, NULL, 0);
 	if (result != HUFFMUNCH_OK)
 	{
 		printf("error: compression error %d: %s\n", result, huffmunch_error_description(result));
@@ -252,8 +251,7 @@ int huffmunch_list(const char* list_file, const char* out_file)
 		int result = huffmunch_compress(
 			data.data()+data_start,data_end-data_start,
 			bank.data(),result_size,
-			temp_splits.data(),temp_splits.size(),
-			canonical);
+			temp_splits.data(),temp_splits.size());
 
 		if (result == HUFFMUNCH_OUTPUT_OVERFLOW) // start a new bank if it doesn't fit
 		{
@@ -276,8 +274,7 @@ int huffmunch_list(const char* list_file, const char* out_file)
 			result = huffmunch_compress(
 				data.data()+data_start,data_end-data_start,
 				bank.data(),result_size,
-				NULL,1,
-				canonical);
+				NULL,1);
 		}
 
 		if (result != HUFFMUNCH_OK)
@@ -357,8 +354,6 @@ int print_usage()
 		"        Compress a set of files together from a list file.\n"
 		"\n"
 		"optional arguments:\n"
-		"    -C\n"
-		"        Canonical tree format, slightly smaller, much slower to decompress.\n"
 		"    -V\n"
 		"        Verbose output.\n"
 		"    -S (width)\n"
@@ -367,8 +362,6 @@ int print_usage()
 		"        Number of missed attempts before halting compression, default 100, 0 unlimited.\n"
 		"    -H (width)\n"
 		"        Bytes per integer entry in output header, default 2.\n"
-		"    -T (depth)\n"
-		"        Maximum allowed depth of canonical tree, default 24.\n"
 		#if HUFFMUNCH_DEBUG
 		"    -D[T/B]\n"
 		"        Debug output. (-DT text, -DB binary, -D auto)\n"
@@ -416,11 +409,6 @@ int main(int argc, const char** argv)
 		{
 			switch (arg[1])
 			{
-			case 'c':
-			case 'C':
-				if (strlen(arg) > 2) valid_args = false;
-				canonical = true;
-				break;
 			case 'v':
 			case 'V':
 				if (strlen(arg) > 2) valid_args = false;
@@ -477,12 +465,6 @@ int main(int argc, const char** argv)
 				if (strlen(arg) > 2) valid_args = false;
 				if ((i+1) >= argc) { valid_args = false; break; }
 				huffmunch_configure(HUFFMUNCH_HEADER_WIDTH, strtoul(argv[i+1],NULL,0)); ++i;
-				break;
-			case 't':
-			case 'T':
-				if (strlen(arg) > 2) valid_args = false;
-				if ((i+1) >= argc) { valid_args = false; break; }
-				huffmunch_configure(HUFFMUNCH_CANONICAL_DEPTH, strtoul(argv[i+1],NULL,0)); ++i;
 				break;
 			default:
 				valid_args = false;

@@ -18,12 +18,6 @@ using namespace std;
 // the longest allowed length of a dictionary symbol
 const unsigned int MAX_SYMBOL_SIZE = 255;
 
-// the greatest tree depth allowed for canonical mode
-static unsigned int max_canonical_depth = 24;
-
-// the greatest number of symbols allowed for canonical mode
-static unsigned int MAX_CANONICAL_SYMBOLS = 65536;
-
 // size of integers in header (maximum stream size)
 // 2 bytes = 64 KB maximum output size
 // 3 bytes = 16 MB maximum output size
@@ -503,10 +497,10 @@ elem best_suffix(elem e, uint overhead, const vector<Stri>& symbols, const vecto
 }
 
 //
-// Standard tree
+// Tree
 //
 
-uint huffmunch_tree_bytes_node_s(const HuffTree& tree, const HuffNode* node, const vector<Stri>& symbols)
+uint huffmunch_tree_bytes_node(const HuffTree& tree, const HuffNode* node, const vector<Stri>& symbols)
 {
 	if (node->leaf != EMPTY)
 	{
@@ -532,8 +526,8 @@ uint huffmunch_tree_bytes_node_s(const HuffTree& tree, const HuffNode* node, con
 
 	assert(node->c0 != NULL);
 	assert(node->c1 != NULL);
-	uint ta = huffmunch_tree_bytes_node_s(tree, node->c0, symbols);
-	uint tb = huffmunch_tree_bytes_node_s(tree, node->c1, symbols);
+	uint ta = huffmunch_tree_bytes_node(tree, node->c0, symbols);
+	uint tb = huffmunch_tree_bytes_node(tree, node->c1, symbols);
 	uint tmin = min(ta,tb); // smaller node goes on left
 	uint skip = tmin + 1; // skip distance is left node + 1 byte to store the distance
 	assert (skip >= 3); // leaf must be at least 2 bytes
@@ -543,12 +537,12 @@ uint huffmunch_tree_bytes_node_s(const HuffTree& tree, const HuffNode* node, con
 	return 3 + ta + tb;
 }
 
-uint huffmunch_tree_bytes_s(const HuffTree& tree, const vector<Stri>& symbols)
+uint huffmunch_tree_bytes(const HuffTree& tree, const vector<Stri>& symbols)
 {
-	return huffmunch_tree_bytes_node_s(tree, tree.head, symbols);
+	return huffmunch_tree_bytes_node(tree, tree.head, symbols);
 }
 
-void huffmunch_tree_build_node_s(const HuffTree& tree, const HuffNode* node, const vector<Stri>& symbols,
+void huffmunch_tree_build_node(const HuffTree& tree, const HuffNode* node, const vector<Stri>& symbols,
 	uint depth, uint code, unordered_map<elem,HuffCode>& codes,
 	vector<Fixup>& fixup, unordered_map<elem,uint>& string_position,
 	vector<u8>& output)
@@ -637,8 +631,8 @@ void huffmunch_tree_build_node_s(const HuffTree& tree, const HuffNode* node, con
 	assert(node->c1 != NULL);
 
 	// determine size of 2 branches
-	uint ta = huffmunch_tree_bytes_node_s(tree, node->c0, symbols);
-	uint tb = huffmunch_tree_bytes_node_s(tree, node->c1, symbols);
+	uint ta = huffmunch_tree_bytes_node(tree, node->c0, symbols);
+	uint tb = huffmunch_tree_bytes_node(tree, node->c1, symbols);
 
 	// put lowest branch on left
 	const HuffNode* na = node->c0;
@@ -673,21 +667,21 @@ void huffmunch_tree_build_node_s(const HuffTree& tree, const HuffNode* node, con
 	uint pa = output.size(); // position of left branch
 	uint pb = pa + ta; // position of right branch
 
-	huffmunch_tree_build_node_s(tree, na, symbols, depth+1, (code<<1)|0, codes, fixup, string_position, output);
+	huffmunch_tree_build_node(tree, na, symbols, depth+1, (code<<1)|0, codes, fixup, string_position, output);
 	assert (output.size() == pb); // verify huffmunch_tree_bytes_node_s size precalculation
-	huffmunch_tree_build_node_s(tree, nb, symbols, depth+1, (code<<1)|1, codes, fixup, string_position, output);
+	huffmunch_tree_build_node(tree, nb, symbols, depth+1, (code<<1)|1, codes, fixup, string_position, output);
 	assert (output.size() == pb+tb); // verify huffmunch_tree_bytes_node_s size precalculation
 
 	assert ((output.size() - p0) == huffmunch_tree_bytes_node_s(tree,node,symbols));
 }
 
-void huffmunch_tree_build_s(const HuffTree& tree, const vector<Stri>& symbols, unordered_map<elem,HuffCode>& codes, vector<u8>& output)
+void huffmunch_tree_build(const HuffTree& tree, const vector<Stri>& symbols, unordered_map<elem,HuffCode>& codes, vector<u8>& output)
 {
 	uint tree_pos = output.size();
 
 	vector<Fixup> fixup;
 	unordered_map<elem,uint> string_position;
-	huffmunch_tree_build_node_s(tree, tree.head, symbols, 0, 0, codes, fixup, string_position, output);
+	huffmunch_tree_build_node(tree, tree.head, symbols, 0, 0, codes, fixup, string_position, output);
 
 	for (Fixup f : fixup)
 	{
@@ -705,7 +699,7 @@ void huffmunch_tree_build_s(const HuffTree& tree, const vector<Stri>& symbols, u
 }
 
 // unpacks packed into unpacked, false on error
-bool huffmunch_decode_s(const vector<u8>& packed, Stri& unpacked)
+bool huffmunch_decode(const vector<u8>& packed, Stri& unpacked)
 {
 	// header
 	vector<uint> split_start;
@@ -828,366 +822,11 @@ bool huffmunch_decode_s(const vector<u8>& packed, Stri& unpacked)
 }
 
 //
-// Canonical tree
-//
-
-class DepthException: public runtime_error
-{
-public:
-	DepthException(const char* message, unsigned int depth) :
-		runtime_error(message) { last_depth = depth; }
-	static unsigned int last_depth;
-};
-unsigned int DepthException::last_depth = 0;
-
-void huffmunch_tree_bytes_node_c(const HuffNode* node, uint depth, vector<uint>& leaf_count)
-{
-	while (leaf_count.size() < (depth+1)) leaf_count.push_back(0);
-	if (node->leaf != EMPTY)
-	{
-		leaf_count[depth] += 1;
-		return;
-	}
-
-	assert(node->c0 != NULL);
-	assert(node->c1 != NULL);
-	huffmunch_tree_bytes_node_c(node->c0, depth+1, leaf_count);
-	huffmunch_tree_bytes_node_c(node->c1, depth+1, leaf_count);
-}
-
-uint huffmunch_tree_bytes_c(const HuffTree& tree, const vector<Stri>& symbols)
-{
-	uint bytes = 0;
-
-	// generate the leaf count list
-	vector<uint> leaf_count;
-	huffmunch_tree_bytes_node_c(tree.head, 0, leaf_count);
-	for (uint c : leaf_count)
-	{
-		bytes += 1;
-		if (c > 255) bytes += 2; // if many leaves on this level write 255 + 16-bit number
-		if (c >= (1<<16)) throw runtime_error("Huffman tree level unexpectedly large!");
-	}
-	auto tree_depth = leaf_count.size();
-	if (tree_depth > max_canonical_depth) throw DepthException("Huffman tree unexpectedly deep!", tree_depth);
-
-	// generate the string table
-	uint symbol_count = 0;
-	for (elem j=0; j<symbols.size(); ++j)
-	{
-		if (!tree.visited[j]) continue;
-		Stri s = symbols[j];
-		++symbol_count;
-
-		static_assert(MAX_SYMBOL_SIZE <= 255, "huffmunch tree data structure does not support leaf strings longer than 255 bytes.");
-		assert(s.size() <= MAX_SYMBOL_SIZE);
-
-		// search for potential suffix strings
-		elem suffix = best_suffix(j,3,symbols,tree.visited);
-		if (suffix != EMPTY)
-		{
-			// 0 to indicate suffix, 1 byte length, prefix, 16-bit reference
-			bytes += 1 + 1 + (s.size() - symbols[suffix].size()) + 2;
-			continue;
-		}
-
-		// 1 byte length, string
-		bytes += 1 + s.size();
-	}
-	if (symbol_count > MAX_CANONICAL_SYMBOLS) throw runtime_error("Huffman tree has unexpectedly large number of symbols!");
-
-	bytes += 1; // store depth of tree
-	if (tree_depth >= 256) bytes += 2; // stored as 0, 16-bit for very deep trees
-
-	return bytes;
-}
-
-void huffmunch_tree_build_node_c(const HuffNode* node, uint depth, vector<vector<elem>>& leaves)
-{
-	// add new level of leaves as encountered
-	while (leaves.size() < (depth+1))
-	{
-		vector<elem> n;
-		leaves.push_back(n);
-	}
-
-	if (node->leaf != EMPTY)
-	{
-		leaves[depth].push_back(node->leaf);
-		return;
-	}
-
-	assert(node->c0 != NULL);
-	assert(node->c1 != NULL);
-	huffmunch_tree_build_node_c(node->c0, depth+1, leaves);
-	huffmunch_tree_build_node_c(node->c1, depth+1, leaves);
-}
-
-void huffmunch_tree_build_c(const HuffTree& tree, const vector<Stri>& symbols, unordered_map<elem,HuffCode>& codes, vector<u8>& output)
-{
-	uint tree_pos = output.size();
-
-	vector<vector<elem>> leaves;
-	huffmunch_tree_build_node_c(tree.head, 0, leaves);
-
-	// write count table
-	if (leaves.size() > max_canonical_depth) throw DepthException("Huffman tree unexpectedly deep!",leaves.size());
-	output.push_back(u8(leaves.size())); // length of table
-	for (uint d=0; d < leaves.size(); ++d)
-	{
-		write_intx(leaves[d].size(), output); // nodes at each level
-		assert(leaves[d].size() <= (1U<<d)); // level has more nodes than possible for a binary tree
-	}
-
-	// write string table, generate canonical codes
-
-	// keep track of addresses to fixup for suffix pointers
-	struct Fixup { uint position; elem e; };
-	vector<Fixup> fixup;
-	unordered_map<elem,uint> string_position;
-
-	uint symbol_count = 0;
-	uint bitcode = 0;
-	for (uint d=0; d < leaves.size(); ++d)
-	{
-		vector<elem>& level = leaves[d];
-		for (uint c=0; c < level.size(); ++c)
-		{
-			assert(bitcode < (1U<<d)); // can't be more than 2^d leaves at level d
-			HuffCode code = { bitcode, d };
-			DEBUG_OUT(DBT,"symbol %d/%d ",bitcode,d);
-			++bitcode; // next available leaf on this layer
-
-			elem e = level[c];
-			assert(codes.find(e) == codes.end()); // don't add duplicates
-			codes[e] = code;
-
-			string_position[e] = output.size();
-			Stri s = symbols[e];
-			assert(s.size() < 256); // this format doesn't support larger symbols
-			uint emit = s.size();
-			++symbol_count;
-
-			#if HUFFMUNCH_DEBUG
-			if (debug_bits & DBT) print_stri(s);
-			#endif
-
-			elem suffix = best_suffix(e,3,symbols,tree.visited);
-			if (suffix != EMPTY)
-			{
-				assert(symbols[suffix].size() < s.size());
-				emit = s.size() - symbols[suffix].size();
-				output.push_back(0); // 0 prefix signifies string with suffix
-			}
-
-			// emit the string
-			assert (emit > 0 && emit < 256);
-			output.push_back(emit);
-			for (uint i=0; i<emit; ++i)
-			{
-				assert(s[i]<256);
-				output.push_back(u8(s[i]));
-			}
-
-			// placeholder 16-bit reference for suffix, to be fixed up later
-			if (suffix != EMPTY)
-			{
-				Fixup f = { output.size(), suffix };
-				fixup.push_back(f);
-				output.push_back(42); // symbol chosen just to be identifiable
-				output.push_back(43);
-				#if HUFFMUNCH_DEBUG
-				if (debug_bits & DBT)
-				{
-					printf("-");
-					print_stri(symbols[suffix]);
-				}
-				#endif
-			}
-			DEBUG_OUT(DBT," x %d\n",tree.count(e));
-		}
-		bitcode *= 2; // next available leaf node on next layer will be at 2x index
-	}
-	if (symbol_count > MAX_CANONICAL_SYMBOLS) throw runtime_error("Huffman tree has unexpectedly large number of symbols!");
-
-	for (Fixup f : fixup)
-	{
-		assert (string_position.find(f.e) != string_position.end());
-		assert (string_position[f.e] >= (tree_pos+1));
-		uint link = string_position[f.e] - (tree_pos+1);
-		if (link >= (1<<16)) throw runtime_error("Unexpectedly large canonical dictionary suffix reference.");
-		assert (output[f.position+0] == 42);
-		assert (output[f.position+1] == 43);
-		output[f.position+0] = link & 255;
-		output[f.position+1] = link >> 8;
-	}
-
-	assert((output.size()-tree_pos) == huffmunch_tree_bytes_c(tree, symbols));
-}
-
-// unpacks packed into unpacked, false on error
-bool huffmunch_decode_c(const vector<u8>& packed, Stri& unpacked)
-{
-	// header
-	vector<uint> split_start;
-	vector<uint> split_size;
-	uint split_count = unpack_header(0,packed);
-	for (unsigned int i=0; i<split_count; ++i)
-	{
-		split_start.push_back(unpack_header(1+i, packed));
-		split_size.push_back(unpack_header(1+i+split_count,packed));
-	}
-	const uint table_pos = (1 + (split_count * 2)) * header_width;
-
-	uint pos = table_pos;
-
-	// read depth of tree
-	uint depth;
-	pos = read_intx(table_pos, packed, depth);
-	DEBUG_OUT(DBV,"depth: %d\n", depth);
-
-	// read leaf counts from tree
-	uint string_count = 0;
-	vector<uint> leaf_count;
-	for (uint i=0; i<depth; ++i)
-	{
-		uint leaves;
-		pos = read_intx(pos, packed, leaves);
-		leaf_count.push_back(leaves);
-		string_count += leaves;
-		DEBUG_OUT(DBV,"leaves %d: %d\n",i,leaves);
-	}
-	DEBUG_OUT(DBV,"string count: %d\n",string_count);
-	const uint string_table_pos = pos;
-
-	BitReader bitstream(&packed);
-
-	for (uint s=0; s<split_count; ++s)
-	{
-		uint length = split_size[s];
-		bitstream.seek(split_start[s]);
-		unpacked.push_back(EMPTY);
-		DEBUG_OUT(DBV,"split %d: %04X (%d bytes)\n",s,split_start[s],length);
-		#if HUFFMUNCH_DEBUG
-		if (debug_bits & DBV)
-		{
-			uint split_end = packed.size();
-			if ((s+1) < split_count) split_end = split_start[s+1];
-			uint bit_length = (split_end - split_start[s]) * 8;
-			uint i=0;
-			while (i<bit_length)
-			{
-				printf("%d",bitstream.read());
-				if ((i&7)==7) printf(" ");
-				++i;
-			}
-			printf("\n");
-			bitstream.seek(split_start[s]);
-		}
-		#endif
-
-		while (length)
-		{
-			uint fc = 0; // first code at current depth
-			uint fs = 0; // first symbol at current depth
-			uint b = 0; // current bitcode
-
-			uint s = 0; // symbol to decode
-			uint d;
-			for (d=0; d <= depth; ++d)
-			{
-				uint ds = leaf_count[d]; // symbols on current layer
-				uint dc = b - fc; // relative code at current depth
-
-				if (dc < ds)
-				{
-					// symbol is matched
-					s = fs + dc;
-					break;
-				}
-				fs += ds; // advance first symbol to next layer
-				fc += ds; // advance code to first non-leaf on layer...
-				fc *= 2;  // ...then make room for a new bit on next layer
-
-				// read a new bit
-				b = (b << 1) | bitstream.read();
-			}
-			if (d > depth) return false; // break was not reached, should be impossible?
-			if (s >= string_count) return false; // should also be impossible
-			DEBUG_OUT(DBV,"(%d) decode: %d/%d > %d [",unpacked.size(),b,d,s);
-
-			// find the start of symbol
-			pos = string_table_pos;
-			for (uint is = 0; is < s; ++is)
-			{
-				uint slen = packed[pos]; ++pos;
-				if (slen != 0)
-				{
-					pos += slen;
-				}
-				else
-				{
-					slen = packed[pos]; ++pos;
-					pos += slen + 2;
-				}
-			}
-			// emit symbol
-			bool remains = true;
-			while (remains)
-			{
-				uint slen = packed[pos]; ++pos;
-				if (slen != 0)
-				{
-					for (uint i=0; i<slen; ++i)
-					{
-						elem c = packed[pos]; ++pos;
-						DEBUG_OUT(DBV,"%02X,",c);
-						unpacked.push_back(c);
-						if (length < 1)
-						{
-							DEBUG_OUT(DBV, " --- End of data reached prematurely?\n");
-							return false;
-						}
-						--length;
-					}
-					remains = false; // no suffix
-				}
-				else
-				{
-					slen = packed[pos]; ++pos;
-					if (slen < 1) return false; // malformed symbol
-					for (uint i=0; i<slen; ++i)
-					{
-						elem c = packed[pos]; ++pos;
-						DEBUG_OUT(DBV,"%02X,",c);
-						unpacked.push_back(c);
-						if (length < 1)
-						{
-							DEBUG_OUT(DBV, " --- End of data reached prematurely?\n");
-							return false;
-						}
-						--length;
-					}
-					// repeat loop from new suffix string
-					uint suffix_pos = packed[pos+0] + (packed[pos+1] << 8) + table_pos + 1;
-					pos = suffix_pos;
-					remains = true;
-					DEBUG_OUT(DBV,"(%d),",pos);
-				}
-			}
-			DEBUG_OUT(DBV,"]\n");
-		}
-	}
-
-	return true;
-}
-
-//
 // the "muncher" that gradually compresses the data by building up its dictionary
 //
 
 // compute the size of the data with a given dictionary
-MunchSize huffmunch_size(const MunchInput& in, bool canonical)
+MunchSize huffmunch_size(const MunchInput& in)
 {
 	MunchSize size = {0,0};
 	if (in.data.size() < 1) return size;
@@ -1195,13 +834,11 @@ MunchSize huffmunch_size(const MunchInput& in, bool canonical)
 	HuffTree tree;
 	huffman_tree(in,tree);
 	size.stream_bits = huffman_tree_bits(tree);
-	size.table_bytes = !canonical ?
-		huffmunch_tree_bytes_s(tree, in.symbols) :
-		huffmunch_tree_bytes_c(tree, in.symbols);
+	size.table_bytes = huffmunch_tree_bytes(tree, in.symbols);
 	return size;
 }
 
-MunchInput huffmunch_munch(const Stri& data, bool canonical)
+MunchInput huffmunch_munch(const Stri& data)
 {
 	const uint data_total = data.size() * 8;
 
@@ -1221,7 +858,7 @@ MunchInput huffmunch_munch(const Stri& data, bool canonical)
 		s.push_back(i);
 		best.symbols.push_back(s);
 	}
-	MunchSize best_size = huffmunch_size(best, canonical);
+	MunchSize best_size = huffmunch_size(best);
 
 	// buffers for storing Rabin-Karp style hashes of various widths for repeated string detection
 	vector<elem> rk[MAX_STEP_SIZE-1];
@@ -1299,7 +936,7 @@ MunchInput huffmunch_munch(const Stri& data, bool canonical)
 				(get<1>(a) > get<1>(b)) ; // otherwise favour shorter strings
 		};
 		priority_queue<Task, std::vector<Task>, decltype(task_less)> task_queue(task_less);
-		task_queue.empty();
+		assert(task_queue.empty());
 
 		for (uint ss=2; ss<=step_size; ++ss)
 		{
@@ -1401,7 +1038,7 @@ MunchInput huffmunch_munch(const Stri& data, bool canonical)
 				// test the actual finished size of the new data and tree
 				try
 				{
-					MunchSize next_size = huffmunch_size(next, canonical);
+					MunchSize next_size = huffmunch_size(next);
 					if (next_size < best_size)
 					{
 						minima = false;
@@ -1471,11 +1108,6 @@ const char* huffmunch_error_description(int e)
 	case HUFFMUNCH_INTERNAL_ERROR: return "Internal error.";
 	case HUFFMUNCH_INVALID_SPLITS: return "Splits must have increasing order, beginning with 0.";
 	case HUFFMUNCH_HEADER_OVERFLOW: return "Split offset or data size too large for header integer size.";
-	case HUFFMUNCH_DEPTH_OVERFLOW:
-	{
-		snprintf(last_error,sizeof(last_error),"Canonical tree too deep (%d > %d)\n",DepthException::last_depth,max_canonical_depth);
-		return last_error;
-	}
 	default: return "Unknown error value.";
 	}
 }
@@ -1486,8 +1118,7 @@ int huffmunch_compress(
 	unsigned char* output,
 	unsigned int& output_size,
 	const unsigned int *splits,
-	unsigned int split_count,
-	bool canonical)
+	unsigned int split_count)
 {
 	if (splits == NULL)
 	{
@@ -1515,7 +1146,7 @@ int huffmunch_compress(
 		print_stri_setup(sdata);
 		#endif
 
-		MunchInput best = huffmunch_munch(sdata, canonical);
+		MunchInput best = huffmunch_munch(sdata);
 
 		HuffTree tree;
 		unordered_map<elem,HuffCode> codes;
@@ -1530,9 +1161,7 @@ int huffmunch_compress(
 		for (uint i=0; i<prefix_size; ++i) packed.push_back(44); // reserve space for header
 
 		huffman_tree(best, tree);
-		!canonical ?
-			huffmunch_tree_build_s(tree, best.symbols, codes, packed) :
-			huffmunch_tree_build_c(tree, best.symbols, codes, packed);
+		huffmunch_tree_build(tree, best.symbols, codes, packed);
 		huffman_encode(codes, best.data, packed, packed_splits);
 
 		DEBUG_OUT(DBH,"split_count: %d\n",split_count);
@@ -1552,9 +1181,7 @@ int huffmunch_compress(
 
 		#if HUFFMUNCH_DEBUG
 		Stri verify;
-		if (!canonical ?
-				huffmunch_decode_s(packed, verify) : 
-				huffmunch_decode_c(packed, verify))
+		if (huffmunch_decode(packed, verify))
 		{
 			if (verify != sdata)
 			{
@@ -1581,11 +1208,6 @@ int huffmunch_compress(
 				output[i] = packed[i];
 		}
 	}
-	catch (DepthException e)
-	{
-		DEBUG_OUT(DBT,"error: canonical depth overflow (%d > %d)\n",DepthException::last_depth,max_canonical_depth);
-		return HUFFMUNCH_DEPTH_OVERFLOW;
-	}
 	catch (exception e)
 	{
 		DEBUG_OUT(DBI,"error: internal error: %s\n",e.what());
@@ -1599,8 +1221,7 @@ int huffmunch_decompress(
 	const unsigned char* data,
 	unsigned int data_size,
 	unsigned char* output,
-	unsigned int& output_size,
-	bool canonical)
+	unsigned int& output_size)
 {
 	try
 	{
@@ -1609,9 +1230,7 @@ int huffmunch_decompress(
 		assert(packed.size() == data_size);
 
 		Stri unpacked;
-		!canonical ?
-			huffmunch_decode_s(packed, unpacked) :
-			huffmunch_decode_c(packed, unpacked);
+		huffmunch_decode(packed, unpacked);
 
 		unsigned int pos = 0;
 		for (unsigned int i=0; i < unpacked.size(); ++i)
@@ -1650,10 +1269,6 @@ bool huffmunch_configure(unsigned int parameter, unsigned int value)
 		if (value < 1) value = 1;
 		if (value > 4) value = 4;
 		header_width = value;
-		break;
-	case HUFFMUNCH_CANONICAL_DEPTH:
-		if (value > 255) value = 255;
-		max_canonical_depth = value;
 		break;
 	default:
 		return false;

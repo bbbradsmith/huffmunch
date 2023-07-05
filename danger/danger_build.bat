@@ -13,16 +13,10 @@ cc65\bin\ca65 -o output\huffmunch_canonical.o -g ..\huffmunch_canonical.s
 cc65\bin\ca65 -o output\danger.o -g danger.s
 @IF ERRORLEVEL 1 GOTO error
 
-cc65\bin\ca65 -o output\danger_canonical.o -D CANONICAL -g danger.s
-@IF ERRORLEVEL 1 GOTO error
-
 cc65\bin\ca65 -o output\music.o -D SFX_NO_HALT -g music\music.s
 @IF ERRORLEVEL 1 GOTO error
 
 cc65\bin\ld65 -o output\danger.nes -m output\danger.map --dbgfile output\danger.dbg -C danger.cfg output\danger.o output\huffmunch.o output\music.o
-@IF ERRORLEVEL 1 GOTO error
-
-cc65\bin\ld65 -o output\danger_canonical.nes -m output\danger_canonical.map --dbgfile output\danger_canonical.dbg -C danger.cfg output\danger_canonical.o output\huffmunch_canonical.o output\music.o
 @IF ERRORLEVEL 1 GOTO error
 
 @echo.

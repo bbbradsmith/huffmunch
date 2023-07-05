@@ -1,18 +1,12 @@
 @del ..\output\test.c.s
 @del ..\output\test.o
-@del ..\output\test_canonical.o
 @del ..\output\test.c.o
 @del ..\output\huffmunch.o
-@del ..\output\huffmunch_canonical.o
 @del ..\output\huffmunch_c.o
 @del ..\output\huffmunch_c_internal.o
 @del ..\output\test.bin
-@del ..\output\test_canonical.bin
 
 ..\cc65\bin\ca65 -o ..\output\huffmunch.o -g ..\..\huffmunch.s
-@IF ERRORLEVEL 1 GOTO error
-
-..\cc65\bin\ca65 -o ..\output\huffmunch_canonical.o -g ..\..\huffmunch_canonical.s
 @IF ERRORLEVEL 1 GOTO error
 
 ..\cc65\bin\ca65 -o ..\output\huffmunch_c.o -D EXTERNAL_ZPBLOCK -g ..\..\huffmunch_c.s
@@ -30,25 +24,16 @@
 ..\cc65\bin\ca65 -o ..\output\test.o -D EXTERNAL_ZPBLOCK -g test.s
 @IF ERRORLEVEL 1 GOTO error
 
-..\cc65\bin\ca65 -o ..\output\test_canonical.o -D CANONICAL -D EXTERNAL_ZPBLOCK -g test.s
-@IF ERRORLEVEL 1 GOTO error
-
 ..\cc65\bin\ca65 -o ..\output\test_internal.o -g test.s
 @IF ERRORLEVEL 1 GOTO error
 
 ..\cc65\bin\ld65 -o ..\output\test.bin           -t sim6502 -m ..\output\test.bin.map           ..\output\test.o           ..\output\huffmunch.o           ..\output\huffmunch_c.o          ..\output\test.c.o sim6502.lib
 @IF ERRORLEVEL 1 GOTO error
 
-..\cc65\bin\ld65 -o ..\output\test_canonical.bin -t sim6502 -m ..\output\test_canonical.bin.map ..\output\test_canonical.o ..\output\huffmunch_canonical.o ..\output\huffmunch_c.o          ..\output\test.c.o sim6502.lib
-@IF ERRORLEVEL 1 GOTO error
-
 ..\cc65\bin\ld65 -o ..\output\test_internal.bin  -t sim6502 -m ..\output\test_internal.bin.map  ..\output\test_internal.o  ..\output\huffmunch.o           ..\output\huffmunch_c_internal.o ..\output\test.c.o sim6502.lib
 @IF ERRORLEVEL 1 GOTO error
 
 ..\cc65\bin\sim65 -c ..\output\test.bin
-@IF ERRORLEVEL 1 GOTO error
-
-..\cc65\bin\sim65 -c ..\output\test_canonical.bin
 @IF ERRORLEVEL 1 GOTO error
 
 ..\cc65\bin\sim65 -c ..\output\test_internal.bin

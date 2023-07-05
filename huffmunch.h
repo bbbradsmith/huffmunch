@@ -14,7 +14,6 @@ const int HUFFMUNCH_VERIFY_FAIL = 2; // internal error: verify failed
 const int HUFFMUNCH_INTERNAL_ERROR = 3; // internal error: use HUFFMUNCH_DEBUG_INTERNAL for diagnostic
 const int HUFFMUNCH_INVALID_SPLITS = 4; // splits must start with 0 and have increasing order
 const int HUFFMUNCH_HEADER_OVERFLOW = 5; // split values overflow header width
-const int HUFFMUNCH_DEPTH_OVERFLOW = 6; // tree depth exceeds canonical allowed depth
 
 // huffmunch_error_description
 //   brief description of the return values above
@@ -43,8 +42,7 @@ extern int huffmunch_compress(
 	unsigned char* output,
 	unsigned int& output_size,
 	const unsigned int *splits,
-	unsigned int split_count,
-	bool canonical = false);
+	unsigned int split_count);
 
 // huffmunch_decompress
 //   data
@@ -59,15 +57,13 @@ extern int huffmunch_decompress(
 	const unsigned char* data,
 	unsigned int data_size,
 	unsigned char* output,
-	unsigned int& output_size,
-	bool canonical = false);
+	unsigned int& output_size);
 
 enum
 {
 	HUFFMUNCH_SEARCH_WIDTH, // maximum symbols to merge per pass, 2-16, default 3
 	HUFFMUNCH_SEARCH_CUTOFF, // number of retries before concluding search, default 100, 0 unlimited
 	HUFFMUNCH_HEADER_WIDTH, // width of integers in header 1-4, default 2
-	HUFFMUNCH_CANONICAL_DEPTH, // maximum tree depth in canonical mode 1-255, default 16
 };
 
 // huffmunch_configure

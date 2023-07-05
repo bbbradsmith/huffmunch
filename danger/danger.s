@@ -49,9 +49,6 @@ music_on:   .res 1
 ; huffmunch data
 .exportzp huffmunch_zpblock
 huffmunch_zpblock: .res 9
-.ifdef CANONICAL
-	.res 23-9 ; canonical requires more RAM
-.endif
 
 .segment "RAM"
 ; rendering
@@ -1180,11 +1177,7 @@ palette_data:
 	.byte $0F, $05, $15, $30
 
 story:
-	.ifndef CANONICAL
-		.incbin "output/danger0000.hfb"
-	.else
-		.incbin "output/danger0000.hfc"
-	.endif
+	.incbin "output/danger0000.hfb"
 
 ;
 ; CHR graphics tiles

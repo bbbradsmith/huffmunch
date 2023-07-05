@@ -46,10 +46,9 @@ The decompression library is provided as 6502 assembly in ca65 ([cc65](https://c
 7. Call **huffmunch_read** once to reach each byte of uncompressed data.
 8. Once the data has been read out, the bytes of _huffmunch_zpblock_ are not needed and can be freely used until another data block is needed.
 
-There are two versions of the decompression library:
+The runtime decompression library:
 
-* **huffmunch.s** - standard version
-* **huffmunch_canonical.s** - canonical version (much slower, slightly better compression)
+* **huffmunch.s** - standard version for 6502
 
 For pure C applications, a wrapper is included:
 
@@ -124,8 +123,7 @@ The performance of this compression method is measured here on the
 | Method       | Average Speed    | Code Size | RAM Required  | Compressed Data Size |
 | ------------ | ---------------- | --------- | ------------- | -------------------- |
 | Uncompressed |   26 cycles/byte |  10 bytes |      2 bytes  | 45418 bytes (100.0%) |
-| Standard     |  260 cycles/byte | 330 bytes |      9 bytes  | 21520 bytes (47.69%) |
-| Canonical    | 1000 cycles/byte | 578 bytes |     23 bytes  | 20751 bytes (45.99%) |
+| Huffmunch    |  260 cycles/byte | 330 bytes |      9 bytes  | 21520 bytes (47.69%) |
 
 The compressed size performance will also vary a lot depending on
  the type of data used. Plain text seems to regularly do better
@@ -133,9 +131,11 @@ The compressed size performance will also vary a lot depending on
  Typically huffmunch does not do as well as the DEFLATE algorithm
  which inspired it, but does at least reach the same ballpark.
 
-The canonical variation of the technique represents the compression tree structure in a
- [more compact way](https://en.wikipedia.org/wiki/Canonical_Huffman_code),
- but takes much longer to decode (and more RAM).
+Up to [version 1.4](../../releases/tag/1.4), a
+ a [canonical variation](https://en.wikipedia.org/wiki/Canonical_Huffman_code)
+ of the huffman compression tree was included as an experiment.
+ It resulted in very slightly smaller data, but required more RAM and was about 4x slower.
+ It was removed in version 1.5 for simplicity.
 
 ## Other Reference
 
