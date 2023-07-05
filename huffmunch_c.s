@@ -1,7 +1,7 @@
 ; C wrapper for huffmunch.s
 
 ; Note for better performance:
-;   allocate 9 bytes on zeropage (or 23 if using canonical version),
+;   allocate 9 bytes on zeropage,
 ;   exportzp as huffmunch_zpblock,
 ;   and define EXTERNAL_ZPBLOCK when building this file.
 ;

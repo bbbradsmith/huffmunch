@@ -149,6 +149,18 @@ Another useful reference is bregalad's
  [Compress Tools](https://www.romhacking.net/utilities/882/)
  which demonstrate several NES-viable compression methods.
 
+## Version History
+
+* 1.0 - 2019-06-03
+  * Initial release
+* 1.4 - 2029-06-11
+  * Fixed bug in canonical variation.
+  * Reduced canonical variation RAM usage by 1 byte.
+  * Minor improvements to debug diagnostic output.
+* 1.5 - 2023-07-05
+  * GCC compilation maintenance. ([sgadrat](https://github.com/sgadrat))
+  * Removed canonical variation.
+
 ## License
 
 This library may be used, reused, and modified for any purpose, commercial or non-commercial.
