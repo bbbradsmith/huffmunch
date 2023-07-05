@@ -10,6 +10,7 @@
 #include <string>
 #include <unordered_map>
 #include <vector>
+#include <stdexcept>
 using namespace std;
 
 #include "huffmunch.h"
