@@ -672,7 +672,7 @@ void huffmunch_tree_build_node(const HuffTree& tree, const HuffNode* node, const
 	huffmunch_tree_build_node(tree, nb, symbols, depth+1, (code<<1)|1, codes, fixup, string_position, output);
 	assert (output.size() == pb+tb); // verify huffmunch_tree_bytes_node_s size precalculation
 
-	assert ((output.size() - p0) == huffmunch_tree_bytes_node_s(tree,node,symbols));
+	assert ((output.size() - p0) == huffmunch_tree_bytes_node(tree,node,symbols));
 }
 
 void huffmunch_tree_build(const HuffTree& tree, const vector<Stri>& symbols, unordered_map<elem,HuffCode>& codes, vector<u8>& output)
@@ -695,7 +695,7 @@ void huffmunch_tree_build(const HuffTree& tree, const vector<Stri>& symbols, uno
 		output[f.position+1] = link >> 8;
 	}
 
-	assert((output.size()-tree_pos) == huffmunch_tree_bytes_s(tree, symbols));
+	assert((output.size()-tree_pos) == huffmunch_tree_bytes(tree, symbols));
 }
 
 // unpacks packed into unpacked, false on error
