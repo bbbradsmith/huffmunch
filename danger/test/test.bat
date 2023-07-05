@@ -42,11 +42,11 @@
 @echo.
 @echo.
 @echo Build and test successful!
-@pause
+@if NOT "%1" == "nopause" pause
 @GOTO end
 :error
 @echo.
 @echo.
 @echo Build or test error!
-@pause
+@if NOT "%1" == "nopause" pause
 :end

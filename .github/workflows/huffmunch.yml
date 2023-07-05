@@ -1,0 +1,70 @@
+name: Huffmunch Build and Test
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout Files
+        uses: actions/checkout@v3
+
+      - name: Copy source files to artifact
+        shell: pwsh
+        run: |
+            Copy-Item -Path . -Destination ./artifact -recurse -Force
+            rmdir ./artifact/.git -r -force
+            rmdir ./artifact/.gihtub -r -force
+
+      - name: Add msbuild to PATH
+        uses: microsoft/setup-msbuild@v1.1
+
+      - name: Build Huffmunch
+        run: msbuild huffmunch.sln -t:rebuild -property:Configuration=release
+
+      - name: Copy release executable to archive
+        shell: pwsh
+        run: |
+            mkdir ./archive/release
+            copy release/huffmunch.exe artifact/release
+
+      - name: Test compression
+        run: |
+            cd danger
+            python danger_prepare.py
+            danger_compress.bat nopause
+
+      - name: Get cc65
+        run: git clone https://github.com/cc65/cc65 danger/cc65
+
+      - name: Build cc65
+        run: msbuild danger/cc65/src/cc65.sln -property:Configuration=Release
+
+      - name: Build cc65 test libraries
+        shell: cmd
+        run: |
+            cd danger/cc65
+            make libtest SHELL=cmd
+
+      - name: Test runtime decompression
+        run: |
+            cd danger/test
+            test.bat nopause
+
+      - name: Test dangerous game sample
+        run: |
+            cd danger
+            danger_build.bat nopause
+
+      - name: Build Huffmunch Debug
+        run: msbuild huffmunch.sln -t:rebuild -property:Configuration=debug
+
+      - name: Upload Artifact
+        uses: actions/upload-artifact@v3
+        with:
+          name: huffmunch-build-artifact.zip
+          path: ./artifact
