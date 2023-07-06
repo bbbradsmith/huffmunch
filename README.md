@@ -126,8 +126,10 @@ The performance of this compression method is measured here on the
 
 | Method       | Average Speed    | Code Size | RAM Required  | Compressed Data Size |
 | ------------ | ---------------- | --------- | ------------- | -------------------- |
-| Uncompressed |   26 cycles/byte |  10 bytes |      2 bytes  | 45418 bytes (100.0%) |
-| Huffmunch    |  260 cycles/byte | 330 bytes |      9 bytes  | 21520 bytes (47.69%) |
+| Uncompressed |   26 cycles/byte |  10 bytes |      2 bytes  | 45414 bytes (100.0%) |
+| Huffmunch    |  260 cycles/byte | 330 bytes |      9 bytes  | 21155 bytes (46.58%) |
+| ZIP          |                - |         - |            -  | 19258 bytes (42.41%) |
+| [lz4](https://lz4.org/) |     - |         - |            -  | 29964 bytes (65.98%) |
 
 The compressed size performance will also vary a lot depending on
  the type of data used. Plain text seems to regularly do better
@@ -139,9 +141,8 @@ Variations of the format have been tried in experiments, but were not satisfacto
  Some of these have been retained as branches for research interest:
 * [Canonical](../../tree/1.4) - A
   [Canonical Huffman](https://en.wikipedia.org/wiki/Canonical_Huffman_code)
-  tree format produced 1-2% compression gain at a 400% speed expense.
-  This was included as an alternative option until version 1.5,
-  but was then removed to simplify the code of the primary useful version.
+  tree format produced 1-2% compression gain at a 400% speed expense,
+  and extra RAM usage.  This was removed in version 1.5 to avoid further maintenance.
 * [RLE prepass](../../tree/rle-prepass) - Applied a simple
   [RLE compression](https://en.wikipedia.org/wiki/Run-length_encoding)
   to the input data before using Huffmunch on that result.
