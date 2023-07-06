@@ -56,6 +56,9 @@ int huffmunch_file(const char* file_in, const char* file_out)
 		return result;
 	}
 	printf("%6d bytes compressed: %6.2f%%\n", size_out, (100.0 * size_out)/size_in);
+	// note: including the 6-byte header table in the compression size,
+	//       because it's needed by the implementation for convenience,
+	//       even though there is only 1 entry in the output.
 
 	f = fopen(file_out, "wb");
 	if (f == NULL)
@@ -71,6 +74,39 @@ int huffmunch_file(const char* file_in, const char* file_out)
 
 	return 0;
 }
+
+// helper function for huffmunch_list
+int write_bank_file(
+	const char* out_prefix,
+	unsigned int current_bank,
+	const char* out_ext,
+	const unsigned char* bank_data,
+	const unsigned int bank_split_index,
+	const unsigned int bank_split_end,
+	const unsigned int data_size)
+{
+	char bank_file[1024];
+	if (snprintf(bank_file, sizeof(bank_file)-1, "%s%04d%s", out_prefix, current_bank, out_ext) < 0)
+	{
+		printf("internal error: unable to create bank filename\n");
+		return -1;
+	}
+
+	FILE *fb = fopen(bank_file, "wb");
+	if (fb == NULL)
+	{
+		printf("error: unable to open bank output file %s\n",bank_file);
+		return -1;
+	}
+	if (bank_data && data_size) fwrite(bank_data,1,data_size,fb);
+	fclose(fb);
+
+	char line[1024];
+	snprintf(line, sizeof(line), "%s: %d - %d (%d bytes)\n", bank_file, bank_split_index, bank_split_end, data_size);
+	if (verbose) printf(line);
+	return 0;
+}
+
 
 int huffmunch_list(const char* list_file, const char* out_file)
 {
@@ -165,7 +201,10 @@ int huffmunch_list(const char* list_file, const char* out_file)
 	fclose(fl);
 	printf("%d entries read from %s\n", entries.size(), list_file);
 	printf("bank size: %d\n", bank_size);
-	if (bank_max < 1) bank_max = 1<<16; // "unlimited"
+
+	// allow "unlimited" banks
+	const unsigned int BANKS_UNLIMITED = 1<<16;
+	if (bank_max < 1) bank_max = BANKS_UNLIMITED;
 
 	// collect data
 
@@ -283,24 +322,9 @@ int huffmunch_list(const char* list_file, const char* out_file)
 			return result;
 		}
 
-		char bank_file[1024];
-		if (snprintf(bank_file, sizeof(bank_file)-1, "%s%04d%s", out_prefix.c_str(), current_bank, out_ext) < 0)
-		{
-			printf("internal error: unable to create bank filename\n");
-			return -1;
-		}
-
-		FILE *fb = fopen(bank_file, "wb");
-		if (fb == NULL)
-		{
-			printf("error: unable to open bank output file %s\n",bank_file);
-			return -1;
-		}
-		fwrite(bank.data(),1,result_size,fb);
-		fclose(fb);
-
-		snprintf(line, sizeof(line), "%s: %d - %d (%d bytes)\n", bank_file, bank_split_index, i, result_size);
-		if (verbose) printf(line);
+		// We are writing this every time, but we could instead only write out the file once the split is decided.
+		result = write_bank_file(out_prefix.c_str(),current_bank,out_ext,bank.data(),bank_split_index,i,result_size);
+		if (result) return result;
 
 		last_used = result_size;
 		last_unused = bank_size - result_size;
@@ -309,6 +333,14 @@ int huffmunch_list(const char* list_file, const char* out_file)
 	total_used += last_used;
 	total_unused += last_unused;
 	bank_splits.push_back(entries.size());
+
+	while (bank_max != BANKS_UNLIMITED && bank_splits.size() < bank_max) // if number of banks is explicit, always generate them all
+	{
+		int result = write_bank_file(out_prefix.c_str(),bank_splits.size(),out_ext,NULL,bank_split_index,bank_split_index,0);
+		if (result) return result;
+		bank_splits.push_back(entries.size());
+		total_unused += bank_size;
+	}
 	printf("%d banks output\n", bank_splits.size());
 
 	// output bank split table
@@ -337,9 +369,15 @@ int huffmunch_list(const char* list_file, const char* out_file)
 	printf("bank end table written to %s\n", out_file);
 
 	unsigned int total_size = total_used + total_unused;
+	unsigned int total_compressed = total_used - (header_width * 2 * entries.size());
+	// note: excluding the location + size table from compression statistics,
+	//       as this is information external to the data, which would still be needed if it as uncompressed.
+	//       The 2-byte per-bank entry count is included, since it's functional information needed by the implementation.
+
 	printf("%7d bytes input\n", data.size());
-	printf("%7d bytes output   %6.2f%%\n", total_used, (100.0 * total_used) / data.size());
-	printf("%7d bytes in banks %6.2f%% (%d unused in %d banks)\n", total_size, (100.0 * total_size) / data.size(), total_unused, bank_splits.size());
+	printf("%7d bytes compressed: %6.2f%%\n", total_compressed, (100.0 * total_compressed) / data.size());
+	printf("%7d bytes to banks:   %6.2f%% full\n", total_used, (100.0 * total_used) / total_size);
+	printf("%7d bytes unused in %d banks (%d bytes each)\n", total_unused, bank_splits.size(), bank_size);
 
 	return 0;
 }
@@ -382,7 +420,7 @@ int print_usage()
 		"    The input sources will be compressed together and packed into banks.\n"
 		"    Integers can be decimal, hexadecimal (0x prefix), or octal (0 prefix).\n"
 		"    Example output:\n"
-		"        out.hfm - a table of %d-byte integers giving the end index of each bank\n"
+		"        out.hfm - a table of %d-byte (-H) integers giving the end index of each bank\n"
 		"        out0000.hfm - the first bank\n"
 		"        out0001.hfm - the second bank\n"
 		"\n", header_width);
