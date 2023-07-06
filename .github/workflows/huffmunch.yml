@@ -49,14 +49,27 @@ jobs:
       - name: Build cc65 test libraries
         shell: cmd
         run: |
-            cd danger/cc65
+            cd danger\cc65
             make libtest SHELL=cmd
 
       - name: Test runtime decompression
         shell: cmd
         run: |
-            cd danger/test
+            cd danger\test
             test.bat nopause
+
+      - name: Test Dangerous Game NES demo build
+        shell: cmd
+        run: |
+            cd danger
+            danger_build.bat nopause
+
+      - name: Copy Dangerous Game NES demo to artifact
+        shell: pwsh
+        run: |
+            mkdir ${{ runner.temp }}\artifact\danger\output
+            copy danger\output\*.* ${{ runner.temp }}\artifact\danger\output
+            rm ${{ runner.temp }}\artifact\danger\output\*.o
 
       - name: Build Huffmunch Debug
         run: msbuild huffmunch.sln -t:rebuild -property:Configuration=debug

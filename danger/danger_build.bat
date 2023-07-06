@@ -19,11 +19,11 @@ cc65\bin\ld65 -o output\danger.nes -m output\danger.map --dbgfile output\danger.
 @echo.
 @echo.
 @echo Build successful!
-pause
+@if NOT "%1" == "nopause" pause
 @GOTO end
 :error
 @echo.
 @echo.
 @echo Build error!
-pause
+@if NOT "%1" == "nopause" pause
 :end

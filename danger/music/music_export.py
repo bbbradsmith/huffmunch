@@ -10,7 +10,7 @@ import os
 import datetime
 
 INPUT_DIR = "."
-OUTPUT_DIR = "../output"
+OUTPUT_DIR = "output"
 FAMITRACKER = "FamiTracker.exe"
 MUSIC_SEGMENT = "DATA"
 

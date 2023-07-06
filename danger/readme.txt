@@ -36,6 +36,12 @@ Build from source:
 6. Run danger_build.bat to build the NES ROM.
 7. See output/danger.nes
 
+Steps 2-3 can be skipped if you don't wish to replace the music,
+and have the pre-built files in music/output/.
+
+Steps 4-5 can be skipped if you don't wish to replace the text,
+and have the pre-built files in output/.
+
 
 Files:
 
@@ -58,8 +64,10 @@ danger_compress.bat
 	output: output\danger0000.hfb
 music\
 	music files and music engine
+music\output\
+	pre-built files from the music export
 output\
-	pre-built files from release package
+	pre-built files from 
 ..\huffmunch.s
 	huffmunch decompressor for 6502
 ..\release\huffmunch.exe

@@ -16,7 +16,7 @@
 .importzp player_next_sound
 .import player_current_music
 
-.include "../output/data_music_enums.inc"
+.include "output/data_music_enums.inc"
 
 ; xxx must be a constant, clobbers A
 .macro PLAY_SOUND xxx
