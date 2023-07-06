@@ -131,11 +131,37 @@ The compressed size performance will also vary a lot depending on
  Typically huffmunch does not do as well as the DEFLATE algorithm
  which inspired it, but does at least reach the same ballpark.
 
-Up to [version 1.4](../../releases/tag/1.4), a
- a [canonical variation](https://en.wikipedia.org/wiki/Canonical_Huffman_code)
- of the huffman compression tree was included as an experiment.
- It resulted in very slightly smaller data, but required more RAM and was about 4x slower.
- It was removed in version 1.5 for simplicity.
+Variations of the format have been tried in experiments, but were not satisfactory.
+ Some of these have been retained as branches for research interest:
+* [Canonical Huffman](../../tree/1.4) - A
+  [canonical](https://en.wikipedia.org/wiki/Canonical_Huffman_code) huffman tree format
+  produced 1-2% compression gain at a 400% speed expense.
+  This was included as an alternative option until version 1.5,
+  but was then removed to simplify the code of the primary useful version.
+* [RLE prepass](../../tree/rle-prepass) - Applied a simple
+  [RLE compression](https://en.wikipedia.org/wiki/Run-length_encoding)
+  to the input data before using Huffmunch on that result.
+  The idea was that huffmunch does not have any built-in concept of repeated bytes,
+  so the repetition ends up occupying space in the compression tree.
+  The prepass efficiently shrinks repetitions with RLE before beginning.
+  Pathological data of long strings of repeated bytes did perform better,
+  but most more "natural" data instead saw a worsening of compression.
+* [RLE inline](../../tree/rle-inline) - Instead of separate pass,
+  this integrated an RLE encoding directly into the compression tree.
+  The result was similar to the prepass experiment.
+* [First-Difference prepass](../../first-difference-prepass) - Replaced each input byte
+  with the difference between it and the previous byte before compressing.
+  This had a similar goal of improving RLE-oriented data compression.
+  The difference prepass should turn all repeated spans into strings of 0 only,
+  which means that the huffmunch compression tree now only has include 1 branch for repeated 0s,
+  rather than having a separate branch for each value.
+  Again, this did improve pathological RLE-focused data,
+  but the difference made everything else compress much worse.
+  Considering a common word, like "common", the "ommon" part would
+  always be the same in this difference encoding, but the "c" would be a different
+  byte depending on what word preceded it. The benefit of more efficient
+  repeated bytes was drastically counteracted by losing 1 character from most
+  potential common substrings.
 
 ## Other Reference
 
