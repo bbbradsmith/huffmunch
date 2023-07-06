@@ -18,7 +18,7 @@ jobs:
         run: |
             Copy-Item -Path . -Destination ${{ runner.temp }}/artifact -recurse -Force
             rmdir ${{ runner.temp }}/artifact/.git -r -force
-            rmdir ${{ runner.temp }}/artifact/.gihtub -r -force
+            rmdir ${{ runner.temp }}/artifact/.github -r -force
 
       - name: Add msbuild to PATH
         uses: microsoft/setup-msbuild@v1.1
