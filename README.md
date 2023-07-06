@@ -133,9 +133,9 @@ The compressed size performance will also vary a lot depending on
 
 Variations of the format have been tried in experiments, but were not satisfactory.
  Some of these have been retained as branches for research interest:
-* [Canonical Huffman](../../tree/1.4) - A
-  [canonical](https://en.wikipedia.org/wiki/Canonical_Huffman_code) huffman tree format
-  produced 1-2% compression gain at a 400% speed expense.
+* [Canonical](../../tree/1.4) - A
+  [Canonical Huffman](https://en.wikipedia.org/wiki/Canonical_Huffman_code)
+  tree format produced 1-2% compression gain at a 400% speed expense.
   This was included as an alternative option until version 1.5,
   but was then removed to simplify the code of the primary useful version.
 * [RLE prepass](../../tree/rle-prepass) - Applied a simple
@@ -149,7 +149,7 @@ Variations of the format have been tried in experiments, but were not satisfacto
 * [RLE inline](../../tree/rle-inline) - Instead of separate pass,
   this integrated an RLE encoding directly into the compression tree.
   The result was similar to the prepass experiment.
-* [First-Difference prepass](../../first-difference-prepass) - Replaced each input byte
+* [First-Difference prepass](../../tree/first-difference-prepass) - Replaced each input byte
   with the difference between it and the previous byte before compressing.
   This had a similar goal of improving RLE-oriented data compression.
   The difference prepass should turn all repeated spans into strings of 0 only,
@@ -187,6 +187,7 @@ Another useful reference is bregalad's
   * C wrapper for cc65.
   * GCC compilation maintenance. ([sgadrat](https://github.com/sgadrat))
   * Removed canonical variation.
+  * Github Actions continuous integration.
 
 ## License
 
