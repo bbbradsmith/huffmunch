@@ -158,6 +158,7 @@ Another useful reference is bregalad's
   * Reduced canonical variation RAM usage by 1 byte.
   * Minor improvements to debug diagnostic output.
 * 1.5 - 2023-07-05
+  * C wrapper for cc65.
   * GCC compilation maintenance. ([sgadrat](https://github.com/sgadrat))
   * Removed canonical variation.
 
