@@ -23,6 +23,13 @@ basic usage:
 
 More detailed usage information can be found by running the utility with no arguments.
 
+The output will include at least two files:
+* `out.hfm` - Bank table (see [format.txt](format.txt)).
+* `out0000.hfm` - Data for the first bank.
+* `out????.hfm` - Data for subsequent banks.
+
+If you do not need multiple banks, simply use the `0000` file and ignore the bank index table.
+
 C++ source code for the command line utility is included, and is not platform specific.
  The compression library itself is separated, and could be integrated into other tools.
 
@@ -188,6 +195,7 @@ Another useful reference is bregalad's
   * GCC compilation maintenance. ([sgadrat](https://github.com/sgadrat))
   * Removed canonical variation.
   * Github Actions continuous integration.
+  * Make Dangerous Game NES demo easier to build.
 
 ## License
 

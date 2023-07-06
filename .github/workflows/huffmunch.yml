@@ -70,6 +70,7 @@ jobs:
             mkdir ${{ runner.temp }}\artifact\danger\output
             copy danger\output\*.* ${{ runner.temp }}\artifact\danger\output
             rm ${{ runner.temp }}\artifact\danger\output\*.o
+            rm ${{ runner.temp }}\artifact\danger\output\test*.*
 
       - name: Build Huffmunch Debug
         run: msbuild huffmunch.sln -t:rebuild -property:Configuration=debug
