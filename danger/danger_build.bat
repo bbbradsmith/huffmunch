@@ -7,9 +7,6 @@
 cc65\bin\ca65 -o output\huffmunch.o -g ..\huffmunch.s
 @IF ERRORLEVEL 1 GOTO error
 
-cc65\bin\ca65 -o output\huffmunch_canonical.o -g ..\huffmunch_canonical.s
-@IF ERRORLEVEL 1 GOTO error
-
 cc65\bin\ca65 -o output\danger.o -g danger.s
 @IF ERRORLEVEL 1 GOTO error
 
