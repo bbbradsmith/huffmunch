@@ -47,13 +47,12 @@ if not needed.
 
 Also, the start of the first bitstream can be found immediately following the
 tree structure. In standard form, this can be found taking right nodes until
-finding a leaf, then advancing to the end of that leaf's data. In canonical form,
-the end of the tree simply follows the string table.
+finding a leaf, then advancing to the end of that leaf's data.
 
 
 
-Standard Tree
-=============
+Tree
+====
 
 The head node of the tree appears immediately following the header.
 There are several types of node, identified by their first byte.
@@ -98,44 +97,6 @@ Similar to the short branch, but the first byte of 255 indicates a 16-bit offset
 
 The left node begins at this node + 3.
 The right node begins at this node + offset.
-
-
-
-Canonical Tree
-==============
-
-The canonical tree is a slightly smaller representation of the huffman tree,
-but it is much slower to decode. All of the leaves are placed in their leftmost
-position, allowing the branch nodes to be implied rather than explicit.
-
-
-The table begins with a description of how many levels the tree has,
-and how many leaves are present at each level.
-
-1. BYTE - depth of tree
-2. INTX x depth - number of leaves at each level of the tree
-
-
-Following the tree description is a table of output strings in canonical order.
-There are two types of strings:
-
-
-1. BYTE - 1-255 - length of string
-2. Bytes x length - bytes to emit
-
-1. BYTE - 0
-2. BYTE - length of prefix
-3. BYTE x length - bytes to emit
-4. WORD - offset to another string, relative to start of tree data + 1 byte
-
-The suffix offsets are relative to the second byte of the tree data,
-since the depth is actually ignored during decoder. (For correct data,
-a leaf is always guaranteed to be reached.)
-
-
-Note that the maximum depth of the tree is limited by the width of
-some variables in the decoder. The provided NES implementation uses
-24-bit values, so the default depth is limited to 24.
 
 
 Bitstream

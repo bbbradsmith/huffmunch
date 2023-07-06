@@ -61,7 +61,6 @@ music\
 output\
 	pre-built files from release package
 ..\huffmunch.s
-..\huffmunch_canonical.s
 	huffmunch decompressor for 6502
 ..\release\huffmunch.exe
 	huffmunch compressor
