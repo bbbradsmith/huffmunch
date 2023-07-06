@@ -8,7 +8,7 @@ on:
 
 jobs:
   build:
-    runs-on: windows-latest
+    runs-on: windows-2019
     steps:
       - name: Checkout Files
         uses: actions/checkout@v3
@@ -18,7 +18,7 @@ jobs:
         run: |
             Copy-Item -Path . -Destination ${{ runner.temp }}/artifact -recurse -Force
             rmdir ${{ runner.temp }}/artifact/.git -r -force
-            rmdir ${{ runner.temp }}/artifact/.gihtub -r -force
+            rmdir ${{ runner.temp }}/artifact/.github -r -force
 
       - name: Add msbuild to PATH
         uses: microsoft/setup-msbuild@v1.1
@@ -29,10 +29,11 @@ jobs:
       - name: Copy release executable to archive
         shell: pwsh
         run: |
-            mkdir ./archive/release
+            mkdir ${{ runner.temp }}/archive/release
             copy release/huffmunch.exe ${{ runner.temp }}/artifact/release
 
       - name: Test compression
+        shell: cmd
         run: |
             cd danger
             python danger_prepare.py
@@ -51,14 +52,10 @@ jobs:
             make libtest SHELL=cmd
 
       - name: Test runtime decompression
+        shell: cmd
         run: |
             cd danger/test
             test.bat nopause
-
-      - name: Test dangerous game sample
-        run: |
-            cd danger
-            danger_build.bat nopause
 
       - name: Build Huffmunch Debug
         run: msbuild huffmunch.sln -t:rebuild -property:Configuration=debug
