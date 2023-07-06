@@ -9,7 +9,7 @@
 
 // huffmunch_compress return values
 const int HUFFMUNCH_OK = 0;
-const int HUFFMUNCH_OUTPUT_OVERFLOW = 1; // too much data for output buffer
+const int HUFFMUNCH_OUTPUT_OVERFLOW = 1; // too much data for output buffer (output_size will contain the needed size)
 const int HUFFMUNCH_VERIFY_FAIL = 2; // internal error: verify failed
 const int HUFFMUNCH_INTERNAL_ERROR = 3; // internal error: use HUFFMUNCH_DEBUG_INTERNAL for diagnostic
 const int HUFFMUNCH_INVALID_SPLITS = 4; // splits must start with 0 and have increasing order
@@ -32,7 +32,7 @@ extern const char* huffmunch_error_description(int e);
 //     out: number of bytes used for compressed output
 //   splits
 //     list of points to split the compressed data for access in split pieces
-//     must begin with 0 and in increasing order
+//     must begin with 0 and continue in increasing order
 //     NULL implies a split_count of 1 (at 0)
 //   split_count
 //     number of entries in splits

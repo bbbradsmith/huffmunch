@@ -77,13 +77,13 @@ int huffmunch_file(const char* file_in, const char* file_out)
 
 // helper function for huffmunch_list
 int write_bank_file(
-	const char* out_prefix,
 	unsigned int current_bank,
+	const char* out_prefix,
 	const char* out_ext,
 	const unsigned char* bank_data,
-	const unsigned int bank_split_index,
-	const unsigned int bank_split_end,
-	const unsigned int data_size)
+	const unsigned int data_size,
+	const unsigned int bank_start,
+	const unsigned int bank_end)
 {
 	char bank_file[1024];
 	if (snprintf(bank_file, sizeof(bank_file)-1, "%s%04d%s", out_prefix, current_bank, out_ext) < 0)
@@ -102,8 +102,8 @@ int write_bank_file(
 	fclose(fb);
 
 	char line[1024];
-	snprintf(line, sizeof(line), "%s: %d - %d (%d bytes)\n", bank_file, bank_split_index, bank_split_end, data_size);
-	if (verbose) printf(line);
+	snprintf(line, sizeof(line), "%s: %d - %d (%d bytes)\n", bank_file, bank_start, bank_end, data_size);
+	printf(line);
 	return 0;
 }
 
@@ -117,6 +117,7 @@ int huffmunch_list(const char* list_file, const char* out_file)
 		int start;
 		int end;
 		string path;
+		unsigned int size;
 	};
 
 	unsigned int bank_size;
@@ -210,10 +211,12 @@ int huffmunch_list(const char* list_file, const char* out_file)
 
 	for (unsigned int i=0; i<entries.size(); ++i)
 	{
-		const Entry& e = entries[i];
-
+		Entry& e = entries[i];
 		splits.push_back(data.size());
 
+		// This is relative to the CWD,
+		// but it would be nice if it was relative to the list file instead,
+		// with the option of using an absolute path.
 		const char* path = e.path.c_str();
 		FILE* fb = fopen(path, "rb");
 		if (fb == NULL)
@@ -239,17 +242,12 @@ int huffmunch_list(const char* list_file, const char* out_file)
 		unsigned int entry_size = end - start;
 		if (end < start) entry_size = 0;
 		if(verbose) printf("%4d: %5d bytes read from %s (%d,%d)\n", i, entry_size, path, e.start, e.end);
+		e.size = entry_size;
 	}
 	printf("%d bytes read from %d source entries\n", data.size(), entries.size());
 	assert(entries.size() == splits.size());
 
 	// compress and output banks
-
-	// This will compress many times, adding one source entry to the bank each time,
-	// until the bank overflows and it begins a new one. Could do this faster with
-	// a more intelligent search (e.g. starting estimate at ~60% of input size and
-	// binary search for a split-point from there), but this linear search was simple
-	// to implement.
 
 	const char* out_ext = strrchr(out_file, '.');
 	if (out_ext == NULL) out_ext = out_file + strlen(out_file);
@@ -259,84 +257,117 @@ int huffmunch_list(const char* list_file, const char* out_file)
 	vector<unsigned int> bank_splits;
 	vector<string> bank_stat;
 	bank.resize(bank_size);
-	unsigned int bank_split_index = 0;
 
 	unsigned int total_used = 0;
 	unsigned int total_unused = 0;
 	unsigned int last_used = 0;
 	unsigned int last_unused = 0;
 
-	strcpy(line,"no bank generated\n");
-
-	for (unsigned int i=0; i<entries.size(); ++i)
+	unsigned int bank_start = 0;
+	while (bank_start < entries.size())
 	{
-		const Entry& e = entries[i];
-		unsigned int current_bank = bank_splits.size();
-
-		if (bank_max == 1) i = entries.size() - 1; // accelerate single bank
-
-		unsigned int data_start = splits[bank_split_index];
-		unsigned int data_end = data.size();
-		if ((i+1) < entries.size()) data_end = splits[i+1];
-
-		vector<unsigned int> temp_splits;
-		for (unsigned int j=bank_split_index; j<=i; ++j)
+		if (bank_splits.size() >= bank_max)
 		{
-			temp_splits.push_back(splits[j] - data_start);
+			printf("error: out of banks at entry %d/%d\n", bank_start,entries.size());
+			return -1;
 		}
 
-		unsigned int result_size = bank_size;
-
-		int result = huffmunch_compress(
-			data.data()+data_start,data_end-data_start,
-			bank.data(),result_size,
-			temp_splits.data(),temp_splits.size());
-
-		if (result == HUFFMUNCH_OUTPUT_OVERFLOW) // start a new bank if it doesn't fit
+		// find a split point for the current bank, starting at bank_start
+		unsigned int bank_end_min = bank_start+1; // must store at least 1 entry
+		unsigned int bank_end_max = entries.size(); // might include all entries
+		unsigned int bank_end = bank_end_max; // best guess so far
+		if (bank_max == 1) // single bank has to store everything
 		{
-			if (!verbose) printf(line);
-
-			total_used += last_used;
-			total_unused += last_unused;
-
-			++current_bank;
-			bank_split_index = i;
-			bank_splits.push_back(i);
-			data_start = splits[bank_split_index];
-
-			if (current_bank >= bank_max)
+			bank_end_min = bank_end_max;
+		}
+		else // otherwise try to make a good first guess
+		{
+			// assuming we can fit roughly (banksize x 2) with 50% compression,
+			// use x3 as a starting guess, hoping to quickly zero in on ~2x
+			// in the binary search (3, 1.5, 2.25, 1.875...)
+			unsigned int target = bank_size * 3;
+			unsigned int accum = header_width;
+			for (bank_end = bank_start; bank_end < bank_end_max; ++bank_end)
 			{
-				printf("error: out of available banks\n");
-				return -1;
+				accum += (2 * header_width) + entries[bank_end].size;
+				if (accum >= target) break;
 			}
-
-			result = huffmunch_compress(
-				data.data()+data_start,data_end-data_start,
-				bank.data(),result_size,
-				NULL,1);
 		}
 
-		if (result != HUFFMUNCH_OK)
+		// binary search to find a bank split that fits
+		unsigned int result_size;
+		while (true)
 		{
-			printf("error: compression error %d: %s\n", result, huffmunch_error_description(result));
-			return result;
+			unsigned int data_start = splits[bank_start];
+			unsigned int data_end = data.size();
+			if (bank_end < splits.size()) data_end = splits[bank_end];
+
+			assert(bank_end <= bank_end_max);
+			assert(bank_end >= bank_end_min);
+
+			vector <unsigned int> temp_splits;
+			for (unsigned int i=bank_start; i<bank_end; ++i)
+				temp_splits.push_back(splits[i] - data_start);
+
+			result_size = bank_size;
+			int result = huffmunch_compress(
+				data.data() + data_start,
+				data_end - data_start,
+				bank.data(), result_size,
+				temp_splits.data(), temp_splits.size());
+			if (verbose) printf("Try bank %2d: %3d - %3d (%d bytes)\n",bank_splits.size(),bank_start,bank_end,result_size);
+
+			// successfully found a split for this bank
+			if ((bank_end == bank_end_max) && result == HUFFMUNCH_OK) break;
+
+			if (result == HUFFMUNCH_OUTPUT_OVERFLOW)
+			{
+				// too much for bank, binary search smaller if possible
+				if (bank_end <= bank_end_min) // nothing left to try, fail
+				{
+					printf("error: can't fit entry %d at bank %d. %d compressed bytes > %d\n",
+						bank_start, bank_splits.size(), result_size, bank_size);
+					return -1;
+				}
+				bank_end_max = bank_end - 1; // max has to be at least 1 smaller
+				bank_end = (bank_end_min + bank_end_max) / 2;
+			}
+			else if (result == HUFFMUNCH_OK)
+			{
+				bank_end_min = bank_end; // found a new valid min
+				bank_end = (bank_end_min + 1 + bank_end_max) / 2;
+			}
+			else // failure
+			{
+				printf("error: compression error %d: %s\n", result, huffmunch_error_description(result));
+				return result;
+			}
 		}
 
-		// We are writing this every time, but we could instead only write out the file once the split is decided.
-		result = write_bank_file(out_prefix.c_str(),current_bank,out_ext,bank.data(),bank_split_index,i,result_size);
+		// success: write the bank
+		int result = write_bank_file(
+			bank_splits.size(),
+			out_prefix.c_str(), out_ext,
+			bank.data(), result_size,
+			bank_start, bank_end);
 		if (result) return result;
 
-		last_used = result_size;
-		last_unused = bank_size - result_size;
+		bank_splits.push_back(bank_end);
+		total_used += result_size;
+		total_unused += (bank_size - result_size);
+		assert(bank_end > bank_start);
+		assert(bank_end <= entries.size());
+		bank_start = bank_end;
 	}
-	if (!verbose) printf(line);
-	total_used += last_used;
-	total_unused += last_unused;
-	bank_splits.push_back(entries.size());
 
-	while (bank_max != BANKS_UNLIMITED && bank_splits.size() < bank_max) // if number of banks is explicit, always generate them all
+	// if number of banks is explicit, always generate them all
+	while (bank_max != BANKS_UNLIMITED && bank_splits.size() < bank_max)
 	{
-		int result = write_bank_file(out_prefix.c_str(),bank_splits.size(),out_ext,NULL,bank_split_index,bank_split_index,0);
+		int result = write_bank_file(
+			bank_splits.size(),
+			out_prefix.c_str(), out_ext,
+			NULL, 0,
+			entries.size(), entries.size());
 		if (result) return result;
 		bank_splits.push_back(entries.size());
 		total_unused += bank_size;
