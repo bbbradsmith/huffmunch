@@ -57,12 +57,6 @@ jobs:
             cd danger/test
             test.bat nopause
 
-      - name: Test dangerous game sample
-        shell: cmd
-        run: |
-            cd danger
-            danger_build.bat nopause
-
       - name: Build Huffmunch Debug
         run: msbuild huffmunch.sln -t:rebuild -property:Configuration=debug
 
