@@ -283,18 +283,18 @@ int huffmunch_list(const char* list_file, const char* out_file)
 		else // otherwise try to make a good first guess
 		{
 			// assuming we can fit roughly (banksize x 2) with 50% compression,
-			// use x3 as a starting guess, hoping to quickly zero in on ~2x
-			// in the binary search (3, 1.5, 2.25, 1.875...)
-			unsigned int target = bank_size * 3;
+			// use x2 input as a starting estimate
+			unsigned int target = bank_size * 2;
 			unsigned int accum = header_width;
 			for (bank_end = bank_start; bank_end < bank_end_max; ++bank_end)
 			{
 				accum += (2 * header_width) + entries[bank_end].size;
 				if (accum >= target) break;
 			}
+			if (bank_end < bank_end_min) bank_end = bank_end_min;
 		}
 
-		// binary search to find a bank split that fits
+		// iterative search to find a bank split that fits
 		unsigned int result_size;
 		while (true)
 		{
@@ -317,10 +317,10 @@ int huffmunch_list(const char* list_file, const char* out_file)
 				temp_splits.data(), temp_splits.size());
 			if (verbose) printf("Try bank %2d: %3d - %3d (%d bytes)\n",bank_splits.size(),bank_start,bank_end,result_size);
 
-			// successfully found a split for this bank
+			// successfully found a split for this bank (fits in bank, and has reached our known upper-bound)
 			if ((bank_end == bank_end_max) && result == HUFFMUNCH_OK) break;
 
-			if (result == HUFFMUNCH_OUTPUT_OVERFLOW)
+			if (result == HUFFMUNCH_OUTPUT_OVERFLOW) // too big
 			{
 				// too much for bank, binary search smaller if possible
 				if (bank_end <= bank_end_min) // nothing left to try, fail
@@ -330,18 +330,30 @@ int huffmunch_list(const char* list_file, const char* out_file)
 					return -1;
 				}
 				bank_end_max = bank_end - 1; // max has to be at least 1 smaller
-				bank_end = (bank_end_min + bank_end_max) / 2;
 			}
-			else if (result == HUFFMUNCH_OK)
+			else if (result == HUFFMUNCH_OK) // fits, but more might be possible
 			{
 				bank_end_min = bank_end; // found a new valid min
-				bank_end = (bank_end_min + 1 + bank_end_max) / 2;
 			}
 			else // failure
 			{
 				printf("error: compression error %d: %s\n", result, huffmunch_error_description(result));
 				return result;
 			}
+
+			// choose next guess based on current compression ratio
+			unsigned int target = bank_size * (data_end - data_start) / result_size;
+			unsigned int accum = header_width;
+			unsigned int bank_end_next = bank_start;
+			for (; bank_end_next <= bank_end_max; ++bank_end_next)
+			{
+				accum += (2 * header_width) + entries[bank_end_next].size;
+				if (accum >= target) break;
+			}
+			if (bank_end_next < bank_end_min) bank_end_next = bank_end_min;
+			if (bank_end_next > bank_end_max) bank_end_next = bank_end_max;
+			if (bank_end_next == bank_end) bank_end_next += 1; // in this case, bank_end == bank_end_min, don't need to retry it
+			bank_end = bank_end_next;
 		}
 
 		// success: write the bank

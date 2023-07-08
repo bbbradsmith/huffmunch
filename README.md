@@ -188,7 +188,7 @@ Another useful reference is bregalad's
   * Fixed bug in canonical variation.
   * Reduced canonical variation RAM usage by 1 byte.
   * Minor improvements to debug diagnostic output.
-* 1.5 - 2023-07-06
+* 1.5 - 2023-07-08
   * C wrapper for cc65.
   * GCC compilation maintenance. ([sgadrat](https://github.com/sgadrat))
   * Removed canonical variation.
@@ -196,7 +196,7 @@ Another useful reference is bregalad's
   * Make Dangerous Game NES demo easier to build.
   * Multi-bank data should export all requested banks.
   * Document intended use of multi-bank data.
-  * Implement binary search for faster bank splitting.
+  * Iterative compression estimation for faster bank splitting.
 
 ## License
 
